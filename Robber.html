@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Robber vs Cop - Steal the Money!</title>
+<style>
+    body { margin:0; background:#222; font-family:Arial; color:white; overflow:hidden; }
+    #game {
+        width: 800px; height: 600px; margin: 20px auto;
+        border: 4px solid #555; position:relative; 
+        background: linear-gradient(to bottom, #0a0a1f 0%, #1a1a3a 40%, #001122 70%, #112244 100%);
+        overflow:hidden; cursor: crosshair;
+    }
+    #background { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1; }
+    .building { 
+        position:absolute; bottom:80px; 
+        background: linear-gradient(to top, #2a2a2a 0%, #444 30%, #333 100%);
+        box-shadow: inset -3px 0 10px rgba(0,0,0,0.6), 2px 2px 10px rgba(0,0,0,0.5);
+    }
+    .window {
+        position:absolute; width:6px; height:6px; background:#ffdd44; 
+        opacity:0.7; border-radius:1px; box-shadow: 0 0 4px #ffd700;
+        left:8px; top:20px;
+    }
+    .money { 
+        position:absolute; width:35px; height:35px; 
+        background:linear-gradient(145deg, #ffd700 0%, #ffaa00 100%); color:black;
+        font-weight:bold; text-align:center; line-height:35px; border-radius:50% 50% 45% 45%; 
+        font-size:30px; box-shadow: 0 8px 16px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.6);
+        z-index:10; cursor:pointer;
+    }
+    .trap { 
+        position:absolute; width:50px; height:50px; line-height:48px; font-size:42px; 
+        background: radial-gradient(closest-side, #333 10%, #111 50%, rgba(0,30,0,0.9) 100%); 
+        color:#555; text-align:center; border-radius:50%; opacity:0.9; 
+        box-shadow: inset 0 8px 20px rgba(0,0,0,0.9), 0 5px 15px rgba(0,0,0,0.6);
+        z-index:15;
+    }
+    #player { 
+        position:absolute; width:60px; height:60px; line-height:60px; font-size:56px; 
+        background:none; border-radius:0; transition:opacity 0.3s; z-index:20; 
+        text-align:center; pointer-events:none;
+    }
+    #cop { 
+        position:absolute; width:65px; height:65px; line-height:65px; font-size:60px; 
+        background:none; border-radius:0; transition: opacity 0.3s, left 0.15s, top 0.15s; 
+        z-index:20; text-align:center;
+    }
+    #score { position:absolute; top:10px; left:10px; font-size:24px; z-index:25; 
+             background:rgba(0,0,0,0.7); padding:10px; border-radius:10px; 
+             box-shadow:0 0 10px rgba(0,255,0,0.3); }
+    #gameover { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+                font-size:50px; background:rgba(0,0,0,0.9); padding:30px; border-radius:20px; 
+                display:none; text-align:center; z-index:50; 
+                box-shadow:0 0 30px rgba(255,0,0,0.5); }
+    #titleScreen {
+        position:absolute; top:0; left:0; width:100%; height:100%;
+        background:rgba(0,0,0,0.95); display:flex; flex-direction:column; 
+        justify-content:center; align-items:center; z-index:100;
+    }
+    #titleScreen h1 { font-size:90px; color:lime; margin:0 0 40px 0; 
+                       text-shadow:0 0 30px lime, 0 0 40px lime; font-weight:bold; }
+    #titleScreen .instructions { font-size:26px; color:#ddd; text-align:center; 
+                                 line-height:1.6; max-width:600px; margin:20px 0; }
+    #titleScreen button { font-size:32px; padding:20px 50px; background:#ff4444; 
+                           color:white; border:none; border-radius:20px; cursor:pointer;
+                           box-shadow:0 8px 20px rgba(255,0,0,0.4); 
+                           transition:transform 0.2s, background 0.2s, box-shadow 0.2s; }
+    #titleScreen button:hover { transform:scale(1.08); background:#ff6666; 
+                                 box-shadow:0 12px 25px rgba(255,0,0,0.6); }
+</style>
+</head>
+<body>
+
+<div id="game">
+    <div id="titleScreen">
+        <h1>Robber</h1>
+        <div class="instructions">
+            Move your mouse to control the robber 🦹<br>
+            Left-click 💰 bags to steal money (+10)<br>
+            SPACEBAR to drop traps 🕳️ (5 total)<br>
+            Slow down the cop 👮 and rack up the highest score!
+        </div>
+        <button onclick="startGame()">START ROBBING!</button>
+    </div>
+    <div id="background"></div>
+    <div id="score">Money: 0 | Traps left: 5</div>
+    <div id="player">🦹</div>
+    <div id="cop">👮</div>
+    <div id="gameover">
+        <div>GAME OVER!</div>
+        <div style="font-size:30px;margin:20px;">Final Score: <span id="final">0</span></div>
+        <button onclick="location.reload()">Play Again</button>
+    </div>
+</div>
+
+<script>
+// Game variables
+let score = 0;
+let trapsLeft = 5;
+let gameActive = false;
+
+const game = document.getElementById('game');
+const titleScreen = document.getElementById('titleScreen');
+const background = document.getElementById('background');
+const player = document.getElementById('player');
+const cop = document.getElementById('cop');
+const scoreDisplay = document.getElementById('score');
+const gameover = document.getElementById('gameover');
+
+// Player starts in the center
+let px = 400, py = 300;
+player.style.left = (px - 30) + 'px';
+player.style.top = (py - 30) + 'px';
+player.style.opacity = '0';
+
+// Cop starts at left side
+let cx = 100, cy = 300;
+cop.style.left = (cx - 32.5) + 'px';
+cop.style.top = (cy - 32.5) + 'px';
+cop.style.opacity = '0';
+
+// Money and traps arrays
+let moneyBags = [];
+let traps = [];
+
+// Create city background
+function createCity() {
+    let currentX = 0;
+    while (currentX < 850) {
+        let width = 35 + Math.random() * 55;
+        let height = 140 + Math.random() * 280;
+        const b = document.createElement('div');
+        b.className = 'building';
+        b.style.left = currentX + 'px';
+        b.style.width = width + 'px';
+        b.style.height = height + 'px';
+
+        // Add windows
+        let numFloors = Math.floor(height / 28);
+        for (let f = 0; f < numFloors; f++) {
+            let winY = 18 + f * 26 + Math.random() * 3;
+            let numWindows = Math.floor((width - 10) / 16);
+            for (let w = 0; w < numWindows; w++) {
+                const win = document.createElement('div');
+                win.className = 'window';
+                win.style.left = (6 + w * 16 + Math.random() * 5) + 'px';
+                win.style.top = winY + 'px';
+                b.appendChild(win);
+            }
+        }
+
+        background.appendChild(b);
+        currentX += width + (8 + Math.random() * 22);
+    }
+
+    // Add road
+    const road = document.createElement('div');
+    road.style.position = 'absolute';
+    road.style.bottom = '0';
+    road.style.left = '0';
+    road.style.width = '800px';
+    road.style.height = '80px';
+    road.style.background = 'linear-gradient(to bottom, #555 0%, #222 50%, #111 100%)';
+    road.style.boxShadow = 'inset 0 10px 25px rgba(0,0,0,0.7)';
+    background.appendChild(road);
+
+    // Road lines
+    for (let i = 0; i < 12; i++) {
+        const line = document.createElement('div');
+        line.style.position = 'absolute';
+        line.style.left = (40 + i * 65) + 'px';
+        line.style.top = '32px';
+        line.style.width = '3px';
+        line.style.height = '16px';
+        line.style.background = 'linear-gradient(to bottom, #fff 0%, #ccc 100%)';
+        line.style.boxShadow = '0 0 4px #aaf';
+        line.style.borderRadius = '2px';
+        road.appendChild(line);
+    }
+}
+
+// Start game function
+function startGame() {
+    titleScreen.style.display = 'none';
+    player.style.opacity = '1';
+    cop.style.opacity = '1';
+    scoreDisplay.style.opacity = '1';
+    gameActive = true;
+    createCity();
+    for(let i = 0; i < 10; i++) spawnMoney();
+    updateScore();
+    moveCop();
+}
+
+// Spawn money bags
+function spawnMoney() {
+    if (!gameActive) return;
+    const m = document.createElement('div');
+    m.className = 'money';
+    m.textContent = '💰';
+    m.style.left = (Math.random() * 765 + 15) + 'px';
+    m.style.top = (Math.random() * 565 + 15) + 'px';
+    game.appendChild(m);
+    moneyBags.push(m);
+
+    // Collect when clicked
+    m.onclick = () => {
+        if (!gameActive) return;
+        score += 10;
+        updateScore();
+        m.remove();
+        moneyBags = moneyBags.filter(b => b !== m);
+        spawnMoney(); // infinite money!
+    };
+}
+
+// Place trap on SPACEBAR (at player position)
+document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && trapsLeft > 0 && gameActive) {
+        e.preventDefault();
+        const t = document.createElement('div');
+        t.className = 'trap';
+        t.textContent = '🕳️';
+        t.style.left = (px - 25) + 'px';
+        t.style.top = (py - 25) + 'px';
+        game.appendChild(t);
+        traps.push({el: t, x: px, y: py});
+        trapsLeft--;
+        updateScore();
+    }
+});
+
+// Move player with mouse
+game.addEventListener('mousemove', e => {
+    if (!gameActive) return;
+    px = Math.max(35, Math.min(765, e.clientX - game.offsetLeft));
+    py = Math.max(35, Math.min(565, e.clientY - game.offsetTop));
+    player.style.left = (px - 30) + 'px';
+    player.style.top = (py - 30) + 'px';
+});
+
+// Cop AI - chases player, slowed by traps
+function moveCop() {
+    if (!gameActive) return;
+
+    let speed = 1.3;
+
+    // Check if cop is on a trap
+    for (let trap of traps) {
+        let dx = cx - trap.x;
+        let dy = cy - trap.y;
+        if (Math.sqrt(dx*dx + dy*dy) < 48) {
+            speed = 0.35; // slowed down!
+            trap.el.style.background = 'radial-gradient(circle, crimson 0%, darkred 80%, rgba(50,0,0,0.9) 100%)';
+            trap.el.style.boxShadow = 'inset 0 8px 20px rgba(100,0,0,0.9), 0 5px 15px rgba(0,0,0,0.6)';
+        }
+    }
+
+    // Move toward player
+    let dx = px - cx;
+    let dy = py - cy;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > 8) {
+        cx += (dx / dist) * speed;
+        cy += (dy / dist) * speed;
+    }
+
+    // Keep cop in bounds
+    cx = Math.max(40, Math.min(760, cx));
+    cy = Math.max(40, Math.min(560, cy));
+
+    cop.style.left = (cx - 32.5) + 'px';
+    cop.style.top = (cy - 32.5) + 'px';
+
+    // Collision with player = Game Over
+    if (dist < 55) {
+        gameActive = false;
+        document.getElementById('final').textContent = score;
+        gameover.style.display = 'block';
+    }
+
+    requestAnimationFrame(moveCop);
+}
+
+function updateScore() {
+    scoreDisplay.textContent = `Money: ${score} | Traps left: ${trapsLeft}`;
+    scoreDisplay.style.opacity = '1';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Terminator - Tank vs Evil Robots</title>
+<style>
+  body { margin: 0; background: #000; overflow: hidden; font-family: Arial, sans-serif; }
+  canvas { display: block; cursor: crosshair; }
+  #hud {
+    position: absolute; top: 15px; left: 20px; color: #fff; font-size: 24px; font-weight: bold;
+    text-shadow: 0 0 10px #00ff00; pointer-events: none; z-index: 10;
+  }
+  #hud div { margin: 5px 0; }
+  #gameOver {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: #f44; font-size: 90px; font-weight: bold; display: none;
+    text-shadow: 0 0 20px #f00, 0 0 40px #f00; animation: pulse 0.5s infinite;
+    pointer-events: none; z-index: 15;
+  }
+  #resetBtn {
+    position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 40px; font-weight: bold; padding: 20px 50px; 
+    background: linear-gradient(45deg, #00ff44, #00cc00); color: #000; border: none; 
+    border-radius: 50px; cursor: pointer; text-shadow: none; 
+    box-shadow: 0 10px 40px #00ff00; transition: all 0.3s ease;
+    display: none; pointer-events: auto; z-index: 20;
+    font-family: Arial Black, sans-serif;
+  }
+  #resetBtn:hover {
+    transform: translate(-50%, -50%) scale(1.1);
+    box-shadow: 0 15px 60px #00ff88; background: linear-gradient(45deg, #00ff88, #00ff44);
+  }
+  #resetBtn:active {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  #startScreen {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: #000; color: #fff; display: flex; justify-content: center; align-items: center;
+    font-size: 60px; font-weight: bold; cursor: pointer; text-align: center; z-index: 50;
+    flex-direction: column; user-select: none;
+  }
+  #startScreen span {
+    font-size: 24px; margin-top: 20px; color: #ff0000;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div>💀 Score: <span id="score">0</span></div>
+  <div>❤️ Health: <span id="health">100</span></div>
+</div>
+<div id="gameOver">GAME OVER</div>
+<button id="resetBtn">🔄 RESTART</button>
+<div id="startScreen">TERMINATOR<span>Click Anywhere to Start</span></div>
+
+<canvas id="game"></canvas>
+
+<script>
+// ================== SETUP ==================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let score = 0;
+let gameActive = false;
+let mouseDown = false;
+
+// ================== ELEMENTS ==================
+const resetBtn = document.getElementById('resetBtn');
+const gameOverEl = document.getElementById('gameOver');
+const startScreen = document.getElementById('startScreen');
+
+// ================== PARTICLES & POWERUPS ==================
+const particles = [];
+const powerUps = [];
+const bullets = [];
+const enemyBullets = [];
+
+// ================== PLAYER TANK ==================
+const tank = {
+  x: canvas.width / 2,
+  y: canvas.height / 2,
+  size: 35,
+  speed: 5,
+  bodyAngle: 0,
+  angle: 0,
+  health: 100,
+  hitFlash: 0,
+  shootTimer: 0,
+  rapidTimer: 0,
+  multiTimer: 0,
+  powerTimer: 0
+};
+
+// ================== INPUT ==================
+const keys = {};
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  tank.angle = Math.atan2(e.clientY - rect.top - tank.y, e.clientX - rect.left - tank.x);
+});
+
+canvas.addEventListener('mousedown', e => { if(e.button === 0) mouseDown = true; });
+document.addEventListener('mouseup', e => { if(e.button === 0) mouseDown = false; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ================== START SCREEN ==================
+startScreen.addEventListener('click', () => {
+  startScreen.style.display = 'none';
+  gameActive = true;
+});
+
+// ================== SHOOT ==================
+function shoot() {
+  const shots = tank.multiTimer > 0 ? 3 : 1;
+  const spread = tank.multiTimer > 0 ? 0.15 : 0;
+  const speed = tank.powerTimer > 0 ? 16 : 14;
+  const radius = tank.powerTimer > 0 ? 7 : 5;
+  const dmg = tank.powerTimer > 0 ? 50 : 25;
+
+  for(let i=0;i<shots;i++){
+    const a = tank.angle + (i-(shots-1)/2)*spread;
+    bullets.push({
+      x: tank.x + Math.cos(tank.angle)*45,
+      y: tank.y + Math.sin(tank.angle)*45,
+      vx: Math.cos(a)*speed,
+      vy: Math.sin(a)*speed,
+      radius, dmg
+    });
+  }
+}
+
+// ================== ENEMIES ==================
+const robots = [];
+function spawnRobot(){
+  const side = Math.floor(Math.random()*4);
+  let x,y;
+  if(side===0){ x=Math.random()*canvas.width; y=-60;}
+  if(side===1){ x=Math.random()*canvas.width; y=canvas.height+60;}
+  if(side===2){ x=-60; y=Math.random()*canvas.height;}
+  if(side===3){ x=canvas.width+60; y=Math.random()*canvas.height;}
+
+  robots.push({
+    x,y,size:28,
+    speed:1.2+Math.random()*1.4+score/50000,
+    health:35, angle:0, shootTimer:0,
+    shootCooldown:120+Math.random()*60
+  });
+}
+for(let i=0;i<8;i++) spawnRobot();
+
+// ================== POWERUPS ==================
+function spawnPowerUp(x,y){
+  const types=['rapid','multi','power'];
+  const type=types[Math.floor(Math.random()*3)];
+  let color;
+  if(type==='rapid') color='#ffff44';
+  else if(type==='multi') color='#44ff44';
+  else color='#ff4444';
+
+  powerUps.push({x,y,type,color,timer:300,bob:Math.random()*Math.PI*2});
+}
+
+// ================== RESET ==================
+function resetGame(){
+  tank.health=100; tank.hitFlash=0; tank.shootTimer=0;
+  tank.rapidTimer=0; tank.multiTimer=0; tank.powerTimer=0;
+  tank.x=canvas.width/2; tank.y=canvas.height/2;
+  score=0; gameActive=false; gameOverEl.style.display='none';
+  resetBtn.style.display='none'; startScreen.style.display='flex';
+
+  bullets.length=0; enemyBullets.length=0; robots.length=0;
+  particles.length=0; powerUps.length=0;
+
+  for(let i=0;i<8;i++) spawnRobot();
+
+  document.getElementById('score').textContent=score;
+  document.getElementById('health').textContent=Math.floor(tank.health);
+}
+resetBtn.addEventListener('click',resetGame);
+
+// ================== DRAW FUNCTIONS ==================
+function drawTank() {
+  const lowHealth = tank.health < 30;
+  const flashAlpha = (tank.hitFlash > 0 || lowHealth) ? 0.6 + Math.sin(Date.now() / 150) * 0.4 : 1;
+
+  ctx.save();
+  ctx.translate(tank.x, tank.y);
+  ctx.rotate(tank.bodyAngle);
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 4;
+
+  // Tracks
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(-32, -20, 16, 40);
+  ctx.fillRect(16, -20, 16, 40);
+
+  // Track treads
+  ctx.strokeStyle = '#0a0a0a';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 5; i++) {
+    const y = -20 + i * 8;
+    ctx.beginPath();
+    ctx.moveTo(-32, y);
+    ctx.lineTo(-16, y);
+    ctx.moveTo(16, y);
+    ctx.lineTo(32, y);
+    ctx.stroke();
+  }
+
+  // Body
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#4d662d';
+  ctx.beginPath();
+  ctx.roundRect(-25, -18, 50, 36, 12);
+  ctx.fill();
+
+  // Body details
+  ctx.fillStyle = '#3a4f22';
+  ctx.fillRect(-25, -10, 50, 8);
+  ctx.fillRect(-25, 4, 50, 8);
+
+  // Turret
+  ctx.save();
+  ctx.rotate(tank.angle - tank.bodyAngle);
+  ctx.fillStyle = '#666';
+  ctx.shadowBlur = 5;
+  ctx.beginPath();
+  ctx.arc(0, 0, 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#555';
+  ctx.shadowColor = '#333';
+  ctx.shadowBlur = 3;
+  ctx.fillRect(15, -10, 38, 20);
+  ctx.shadowBlur = 0;
+
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(15, -10, 38, 20);
+  ctx.restore();
+
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = flashAlpha;
+  ctx.restore();
+}
+
+function drawRobot(r) {
+  ctx.save();
+  ctx.translate(r.x, r.y);
+  ctx.rotate(r.angle);
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 3;
+
+  const hue = (1 - r.health / 35) * 60;
+  ctx.fillStyle = `hsl(${hue}, 80%, 35%)`;
+
+  // Body
+  ctx.beginPath();
+  ctx.roundRect(-r.size / 2 + 2, -r.size / 2 + 2, r.size - 4, r.size - 4, 8);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = `hsl(${hue + 20}, 70%, 45%)`;
+  ctx.beginPath();
+  ctx.arc(0, -r.size / 2 - 8, 14, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eyes
+  ctx.shadowColor = '#f00';
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = '#ff4444';
+  ctx.beginPath();
+  ctx.arc(-7, -r.size / 2 - 8, 5, 0, Math.PI * 2);
+  ctx.arc(7, -r.size / 2 - 8, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Antenna
+  ctx.strokeStyle = '#ff8800';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, -r.size / 2 - 20);
+  ctx.lineTo(0, -r.size / 2 - 38);
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffff00';
+  ctx.shadowBlur = 8;
+  ctx.shadowColor = '#ff0';
+  ctx.beginPath();
+  ctx.arc(0, -r.size / 2 - 40, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Legs
+  ctx.strokeStyle = `hsl(${hue + 10}, 60%, 30%)`;
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  for (let leg = -1; leg <= 1; leg += 2) {
+    ctx.beginPath();
+    ctx.moveTo(leg * 10, r.size / 2 - 5);
+    ctx.quadraticCurveTo(leg * 18, r.size / 2 + 10, leg * 15, r.size / 2 + 25);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(leg * 15, r.size / 2 - 5);
+    ctx.quadraticCurveTo(leg * 22, r.size / 2 + 5, leg * 18, r.size / 2 + 20);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ================== UPDATE ==================
+function update() {
+  if (!gameActive) return;
+
+  // Timers
+  tank.hitFlash = Math.max(0, tank.hitFlash - 1);
+  tank.shootTimer = Math.max(0, tank.shootTimer - 1);
+  tank.rapidTimer = Math.max(0, tank.rapidTimer - 1);
+  tank.multiTimer = Math.max(0, tank.multiTimer - 1);
+  tank.powerTimer = Math.max(0, tank.powerTimer - 1);
+
+  // Shoot
+  if (mouseDown && tank.shootTimer === 0) {
+    shoot();
+    const cooldown = tank.rapidTimer > 0 ? 4 : 12;
+    tank.shootTimer = cooldown;
+  }
+
+  // Tank movement
+  let vx = 0, vy = 0;
+  if (keys['w']) vy -= tank.speed;
+  if (keys['s']) vy += tank.speed;
+  if (keys['a']) vx -= tank.speed;
+  if (keys['d']) vx += tank.speed;
+
+  tank.x += vx;
+  tank.y += vy;
+
+  if (vx !== 0 || vy !== 0) tank.bodyAngle = Math.atan2(vy, vx);
+  tank.x = Math.max(tank.size, Math.min(canvas.width - tank.size, tank.x));
+  tank.y = Math.max(tank.size, Math.min(canvas.height - tank.size, tank.y));
+
+  // Bullets movement
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.x += b.vx;
+    b.y += b.vy;
+    if (b.x < -50 || b.x > canvas.width + 50 || b.y < -50 || b.y > canvas.height + 50) bullets.splice(i, 1);
+  }
+
+  // Enemy bullets
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    const eb = enemyBullets[i];
+    eb.x += eb.vx;
+    eb.y += eb.vy;
+    if (eb.x < -50 || eb.x > canvas.width + 50 || eb.y < -50 || eb.y > canvas.height + 50) {
+      enemyBullets.splice(i, 1);
+      continue;
+    }
+    const dx = eb.x - tank.x;
+    const dy = eb.y - tank.y;
+    if (Math.hypot(dx, dy) < tank.size + eb.radius) {
+      tank.health -= 10;
+      tank.hitFlash = 15;
+      const colors = ['#ffaa00', '#ff4400', '#ff0000'];
+      for (let k = 0; k < 12; k++) {
+        particles.push({
+          x: eb.x, y: eb.y,
+          vx: (Math.random()-0.5)*12,
+          vy: (Math.random()-0.5)*12,
+          life: 40, maxLife: 40,
+          color: colors[Math.floor(Math.random()*colors.length)]
+        });
+      }
+      enemyBullets.splice(i,1);
+    }
+  }
+
+  // Powerups
+  for (let i = powerUps.length - 1; i >= 0; i--) {
+    const pu = powerUps[i];
+    pu.bob += 0.15;
+    pu.y -= 0.8;
+    pu.timer--;
+    if (pu.timer <= 0) { powerUps.splice(i,1); continue; }
+
+    const dx = pu.x - tank.x;
+    const dy = pu.y - tank.y;
+    if (Math.hypot(dx,dy)<30) {
+      const duration=900;
+      if(pu.type==='rapid') tank.rapidTimer=duration;
+      else if(pu.type==='multi') tank.multiTimer=duration;
+      else if(pu.type==='power') tank.powerTimer=duration;
+
+      for(let k=0;k<15;k++){
+        particles.push({
+          x: pu.x, y: pu.y,
+          vx: (Math.random()-0.5)*10,
+          vy: (Math.random()-0.5)*10-2,
+          life: 45, maxLife: 45,
+          color: pu.color
+        });
+      }
+      powerUps.splice(i,1);
+    }
+  }
+
+  // Robots movement & shooting
+  robots.forEach(r=>{
+    const dx = tank.x - r.x;
+    const dy = tank.y - r.y;
+    const dist = Math.hypot(dx, dy);
+    r.angle = Math.atan2(dy, dx);
+    if(dist>0){ r.x += dx/dist*r.speed; r.y += dy/dist*r.speed; }
+
+    if(dist<tank.size+r.size){ tank.health-=1; r.health-=1; tank.hitFlash=5; }
+    r.shootTimer--;
+    if(r.shootTimer<=0){
+      const ebSpeed=4+Math.random()*2;
+      enemyBullets.push({
+        x: r.x + Math.cos(r.angle)*r.size,
+        y: r.y + Math.sin(r.angle)*r.size,
+        vx: Math.cos(r.angle)*ebSpeed,
+        vy: Math.sin(r.angle)*ebSpeed,
+        radius:6
+      });
+      r.shootTimer=r.shootCooldown;
+    }
+  });
+
+  // Bullet-robot collisions
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    let hit=false;
+    for(let j=robots.length-1;j>=0;j--){
+      const r=robots[j];
+      const dx=b.x-r.x;
+      const dy=b.y-r.y;
+      if(Math.hypot(dx,dy)<r.size+b.radius){
+        r.health-=b.dmg;
+        if(r.health<=0){
+          robots.splice(j,1);
+          score+=10;
+          spawnRobot();
+          if(Math.random()<0.3) spawnPowerUp(r.x,r.y);
+        }
+        bullets.splice(i,1);
+        hit=true;
+        break;
+      }
+    }
+    if(hit) continue;
+  }
+
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.life--;
+    if(p.life<=0) particles.splice(i,1);
+  }
+
+  // Game over
+  if(tank.health<=0){
+    gameActive=false;
+    gameOverEl.style.display='block';
+    resetBtn.style.display='block';
+  }
+
+  document.getElementById('score').textContent=score;
+  document.getElementById('health').textContent=Math.floor(Math.max(0,tank.health));
+}
+
+// ================== DRAW ==================
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Particles
+  particles.forEach(p=>{
+    ctx.fillStyle=p.color;
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,3,0,Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha=1;
+  });
+
+  // Powerups
+  powerUps.forEach(p=>{
+    ctx.fillStyle=p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y + Math.sin(p.bob)*5, 12,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  bullets.forEach(b=>{
+    ctx.fillStyle='#0ff';
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,b.radius,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  enemyBullets.forEach(b=>{
+    ctx.fillStyle='#f00';
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,b.radius,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  robots.forEach(drawRobot);
+  drawTank();
+}
+
+// ================== LOOP ==================
+function loop() {
+  if(gameActive) { update(); draw(); }
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ================== RESIZE ==================
+window.addEventListener('resize',()=>{
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+});
+</script>
+
+</body>
+</html>
