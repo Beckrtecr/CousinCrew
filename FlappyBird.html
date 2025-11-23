@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flappy Bird</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #000;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      background: linear-gradient(#5BCBFF, #A0E9FF);
+      display: block;
+      border: 8px solid #333;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+    #start-screen, #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 30px 50px;
+      border-radius: 20px;
+      text-align: center;
+      font-size: 28px;
+      backdrop-filter: blur(5px);
+    }
+    #start-screen h1 {
+      font-size: 60px;
+      margin: 0 0 20px 0;
+      color: #FFD700;
+      text-shadow: 3px 3px 6px #000;
+    }
+    button {
+      margin-top: 25px;
+      padding: 18px 40px;
+      font-size: 32px;
+      cursor: pointer;
+      background: #FFD700;
+      border: none;
+      border-radius: 15px;
+      font-weight: bold;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+    }
+    button:hover { background: #FFC107; transform: scale(1.05); }
+    button:active { transform: scale(0.98); }
+  </style>
+</head>
+<body>
+
+  <!-- BIGGER CANVAS: 480×720 -->
+  <canvas id="gameCanvas" width="480" height="720"></canvas>
+
+  <div id="start-screen">
+    <h1>Flappy Bird</h1>
+    <p>Click • Tap • Space to fly</p>
+    <button onclick="startGame()">Flappy Bird</button>
+  </div>
+
+  <div id="game-over" style="display:none;">
+    <h1>Game Over</h1>
+    <p style="font-size:36px;">Score: <span id="final-score">0</span></p>
+    <button onclick="restartGame()">Play Again</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over');
+    const finalScoreDisplay = document.getElementById('final-score');
+
+    // Game variables
+    let bird, gravity, velocity, pipes, score, gameRunning, frame;
+
+    function resetGame() {
+      bird = {
+        x: 120,                           // Moved a bit right for bigger screen
+        y: canvas.height / 2,
+        radius: 18,                       // Slightly bigger bird
+        color: '#FFD700'
+      };
+      gravity = 0.6;                      // Adjusted gravity for bigger screen
+      velocity = 0;
+      pipes = [];
+      score = 0;
+      frame = 0;
+      gameRunning = false;
+
+      createPipe();
+    }
+
+    function createPipe() {
+      const gap = 180;                    // Bigger gap for easier play on large screen
+      const minHeight = 80;
+      const maxHeight = canvas.height - gap - minHeight - 100;
+      const height = Math.floor(Math.random() * (maxHeight - minHeight)) + minHeight;
+
+      pipes.push({
+        x: canvas.width,
+        top: height,
+        bottom: canvas.height - height - gap,
+        width: 90,                        // Wider pipes
+        passed: false
+      });
+    }
+
+    function drawBird() {
+      ctx.fillStyle = bird.color;
+      ctx.beginPath();
+      ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eye
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(bird.x + 8, bird.y - 6, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'black';
+      ctx.beginPath();
+      ctx.arc(bird.x + 11, bird.y - 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Beak
+      ctx.fillStyle = '#FF6B00';
+      ctx.beginPath();
+      ctx.moveTo(bird.x + bird.radius, bird.y);
+      ctx.lineTo(bird.x + bird.radius + 20, bird.y);
+      ctx.lineTo(bird.x + bird.radius, bird.y + 12);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawPipes() {
+      ctx.fillStyle = '#5D9E3A';
+      pipes.forEach(pipe => {
+        ctx.fillRect(pipe.x, 0, pipe.width, pipe.top);
+        ctx.fillRect(pipe.x, canvas.height - pipe.bottom, pipe.width, pipe.bottom);
+
+        // Pipe caps
+        ctx.fillStyle = '#4A7C2D';
+        ctx.fillRect(pipe.x - 8, pipe.top - 40, pipe.width + 16, 40);
+        ctx.fillRect(pipe.x - 8, canvas.height - pipe.bottom, pipe.width + 16, 40);
+        ctx.fillStyle = '#5D9E3A';
+      });
+    }
+
+    function drawGround() {
+      ctx.fillStyle = '#8B7355';
+      ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+      ctx.fillStyle = '#5D9E3A';
+      ctx.fillRect(0, canvas.height - 80, canvas.width, 20);
+    }
+
+    function update() {
+      if (!gameRunning) return;
+
+      velocity += gravity;
+      bird.y += velocity;
+
+      // Collision with ground/ceiling
+      if (bird.y + bird.radius > canvas.height - 80 || bird.y - bird.radius < 0) {
+        gameOver();
+      }
+
+      pipes.forEach((pipe, index) => {
+        pipe.x -= 2.5;  // Slightly faster for bigger screen
+
+        if (!pipe.passed && pipe.x + pipe.width < bird.x) {
+          score++;
+          pipe.passed = true;
+        }
+
+        // Collision
+        if (
+          bird.x + bird.radius > pipe.x &&
+          bird.x - bird.radius < pipe.x + pipe.width &&
+          (bird.y - bird.radius < pipe.top || bird.y + bird.radius > canvas.height - pipe.bottom)
+        ) {
+          gameOver();
+        }
+
+        if (pipe.x + pipe.width < 0) {
+          pipes.splice(index, 1);
+        }
+      });
+
+      frame++;
+      if (frame % 100 === 0) {  // New pipes a bit more often
+        createPipe();
+      }
+    }
+
+    function drawScore() {
+      ctx.fillStyle = 'white';
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 6;
+      ctx.font = '60px Arial';
+      ctx.textAlign = 'center';
+      ctx.strokeText(score, canvas.width / 2, 100);
+      ctx.fillText(score, canvas.width / 2, 100);
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawPipes();
+      drawGround();
+      drawBird();
+      drawScore();
+    }
+
+    function gameLoop() {
+      update();
+      render();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function flap() {
+      if (!gameRunning) return;
+      velocity = -10;  // Good jump height for bigger screen
+    }
+
+    function gameOver() {
+      gameRunning = false;
+      finalScoreDisplay.textContent = score;
+      gameOverScreen.style.display = 'block';
+    }
+
+    function startGame() {
+      resetGame();
+      startScreen.style.display = 'none';
+      gameRunning = true;
+    }
+
+    function restartGame() {
+      gameOverScreen.style.display = 'none';
+      resetGame();
+      gameRunning = true;
+    }
+
+    // Controls
+    canvas.addEventListener('click', flap);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); flap(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') { e.preventDefault(); flap(); }
+    });
+
+    // Start
+    resetGame();
+    gameLoop();
+  </script>
+</body>
+</html>
