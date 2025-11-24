@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cookie Empire - Fixed & Perfect</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+
+  body {
+    margin: 0;
+    height: 100vh;
+    background: linear-gradient(135deg, #2c1810, #1a0f0a);
+    color: #fff;
+    font-family: 'Poppins', sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .container { display: flex; height: 100%; }
+
+  .game-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  /* Ultra-realistic cookie */
+  .cookie {
+    width: 260px;
+    height: 260px;
+    background: radial-gradient(circle at 30% 30%, #d2691e, #8b4513);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.7), inset 0 -15px 30px rgba(0,0,0,0.4), inset 0 15px 30px rgba(255,255,255,0.1);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.1s;
+  }
+  .cookie:active { transform: scale(0.92); }
+
+  .chip { position: absolute; background: #2c1810; border-radius: 50%; box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); }
+  .chip1 { width: 28px; height: 28px; top: 50px; left: 70px; }
+  .chip2 { width: 32px; height: 32px; top: 90px; left: 180px; }
+  .chip3 { width: 24px; height: 24px; top: 160px; left: 100px; }
+  .chip4 { width: 30px; height: 30px; top: 120px; left: 40px; }
+  .chip5 { width: 26px; height: 26px; top: 70px; left: 160px; }
+  .chip6 { width: 22px; height: 22px; top: 180px; left: 170px; }
+
+  .cookies {
+    position: absolute;
+    top: 50px;
+    font-size: 52px;
+    font-weight: 800;
+    background: linear-gradient(90deg, #ffaa44, #ff6b6b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .cps {
+    margin-top: 30px;
+    font-size: 28px;
+    font-weight: 600;
+    color: #00ffcc;
+    text-shadow: 0 0 15px #00ffcc88;
+  }
+
+  .shop-panel {
+    width: 420px;
+    background: rgba(20, 15, 12, 0.95);
+    backdrop-filter: blur(12px);
+    border-left: 1px solid #8b4513;
+    padding: 25px;
+    overflow-y: auto;
+    box-shadow: -15px 0 40px rgba(0,0,0,0.6);
+  }
+
+  .shop-title {
+    font-size: 32px;
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 20px;
+    background: linear-gradient(90deg, #ffaa44, #ff6b6b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .shop-item {
+    background: rgba(139, 69, 19, 0.2);
+    border: 1px solid rgba(255, 165, 0, 0.3);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+    transition: all 0.3s;
+  }
+  .shop-item:hover {
+    background: rgba(139, 69, 19, 0.4);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(255, 165, 0, 0.2);
+  }
+
+  .item-info h3 { margin: 0 0 6px 0; font-size: 20px; }
+  .item-info p { margin: 4px 0; color: #00ffcc; font-size: 15px; }
+  .item-owned { font-size: 13px; color: #ffaa44; }
+  .item-price { font-weight: bold; color: #ffd700; font-size: 18px; }
+  .buy-btn {
+    margin-top: 8px;
+    background: linear-gradient(45deg, #00ffcc, #00cc99);
+    color: black;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    width: 100%;
+  }
+  .buy-btn:disabled { background: #555; opacity: 0.5; cursor: not-allowed; }
+
+  .floating-number {
+    position: absolute;
+    pointer-events: none;
+    font-weight: bold;
+    font-size: 24px;
+    color: #ffaa44;
+    text-shadow: 2px 2px 6px #000;
+    animation: floatUp 1.2s ease-out forwards;
+  }
+  @keyframes floatUp { to { transform: translateY(-120px); opacity: 0; } }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="game-area">
+    <div class="cookies" id="cookies">0 cookies</div>
+    <div class="cookie" id="bigCookie">
+      <div class="chip chip1"></div>
+      <div class="chip chip2"></div>
+      <div class="chip chip3"></div>
+      <div class="chip chip4"></div>
+      <div class="chip chip5"></div>
+      <div class="chip chip6"></div>
+    </div>
+    <div class="cps" id="cps">0 per second</div>
+  </div>
+
+  <div class="shop-panel">
+    <h2 class="shop-title">Cookie Empire</h2>
+    <div id="shopItems"></div>
+  </div>
+</div>
+
+<script>
+const items = [
+  { name: "Cursor",           baseCost: 10,     cps: 0.2,   owned: 0, autoClick: true },
+  { name: "Grandma",          baseCost: 50,     cps: 1,     owned: 0 },
+  { name: "Oven",             baseCost: 300,    cps: 6,     owned: 0 },
+  { name: "Bakery",           baseCost: 1500,   cps: 30,    owned: 0 },
+  { name: "Factory",          baseCost: 8000,   cps: 150,   owned: 0 },
+  { name: "Cookie Farm",      baseCost: 40000,  cps: 800,   owned: 0 },
+  { name: "Mine",             baseCost: 200000, cps: 4000,  owned: 0 },
+  { name: "Portal",           baseCost: 1000000,cps: 25000, owned: 0 },
+  { name: "Time Machine",     baseCost: 8000000,cps: 150000,owned: 0 },
+  { name: "Cookie Reactor",   baseCost: 5e7,    cps: 1e6,   owned: 0 },
+  { name: "Quantum Baker",    baseCost: 3e8,    cps: 8e6,   owned: 0 },
+  { name: "Galaxy Oven",      baseCost: 2e9,    cps: 5e7,   owned: 0 },
+  { name: "Cookie God",       baseCost: 15e9,   cps: 4e8,   owned: 0 },
+  { name: "Infinity Dough",   baseCost: 1e11,   cps: 3e9,   owned: 0 },
+  { name: "Eternal Oven",     baseCost: 1e12,   cps: 25e9,  owned: 0 },
+  { name: "Universe Bakery",  baseCost: 1e13,   cps: 2e11,  owned: 0 },
+  { name: "Multiverse",       baseCost: 1e14,   cps: 2e12,  owned: 0 },
+  { name: "Omniverse",        baseCost: 1e15,   cps: 2e13,  owned: 0 },
+  { name: "The Final Cookie", baseCost: 1e16,   cps: 5e14,  owned: 0 },
+  { name: "You (Ascended)",   baseCost: 1e17,   cps: 1e16,  owned: 0 }
+];
+
+let game = {
+  cookies: 0,
+  totalCookies: 0,
+  cps: 0,
+  clickPower: 1
+};
+
+function format(num) {
+  if (num === 0) return "0";
+  const suffixes = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc"];
+  let i = 0;
+  while (num >= 1000 && i < suffixes.length-1) { num /= 1000; i++; }
+  return num.toFixed(2).replace(/\.00$/, "") + suffixes[i];
+}
+
+function getCost(item) {
+  return Math.floor(item.baseCost * Math.pow(1.15, item.owned));
+}
+
+function updateDisplay() {
+  document.getElementById("cookies").textContent = format(game.cookies) + " cookies";
+  document.getElementById("cps").textContent = format(game.cps) + " per second";
+}
+
+function createFloating(x, y, amount) {
+  const el = document.createElement("div");
+  el.className = "floating-number";
+  el.textContent = "+" + format(amount);
+  el.style.left = (x - 50) + "px";
+  el.style.top = (y - 50) + "px";
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+
+// Manual click
+document.getElementById("bigCookie").addEventListener("click", e => {
+  game.cookies += game.clickPower;
+  game.totalCookies += game.clickPower;
+  createFloating(e.pageX, e.pageY, game.clickPower);
+  updateDisplay();
+  renderShop(); // important: refresh buttons immediately
+});
+
+// Cursor auto-clicks
+setInterval(() => {
+  const cursor = items[0];
+  if (cursor.owned > 0) {
+    const clicks = cursor.owned * cursor.cps * 10;
+    game.cookies += clicks;
+    game.totalCookies += clicks;
+    updateDisplay();
+  }
+}, 100);
+
+// Passive CPS
+setInterval(() => {
+  if (game.cps > 0) {
+    const earned = game.cps / 10;
+    game.cookies += earned;
+    game.totalCookies += earned;
+    updateDisplay();
+  }
+}, 100);
+
+function buyItem(index) {
+  const item = items[index];
+  const cost = getCost(item);
+  if (game.cookies >= cost) {
+    game.cookies -= cost;
+    item.owned++;
+    game.cps += item.cps;
+    updateDisplay();
+    renderShop();
+  }
+}
+
+function renderShop() {
+  const container = document.getElementById("shopItems");
+  container.innerHTML = "";
+  items.forEach((item, i) => {
+    const cost = getCost(item);
+    const canAfford = game.cookies >= cost;
+    
+    const div = document.createElement("div");
+    div.className = "shop-item";
+    div.innerHTML = `
+      <div class="item-info">
+        <h3>${item.name} ${i===0 ? "(Auto-clicks!)" : ""}</h3>
+        <p>Each produces ${format(item.cps)} cookies/sec</p>
+        <span class="item-owned">Owned: ${item.owned.toLocaleString()}</span>
+      </div>
+      <div>
+        <div class="item-price">Cost: ${format(cost)}</div>
+        <button class="buy-btn" ${!canAfford ? "disabled" : ""}>
+          Buy (${item.owned + 1})
+        </button>
+      </div>
+    `;
+    div.querySelector(".buy-btn").onclick = () => buyItem(i);
+    container.appendChild(div);
+  });
+}
+
+// Initial render
+renderShop();
+updateDisplay();
+</script>
+</body>
+</html>
