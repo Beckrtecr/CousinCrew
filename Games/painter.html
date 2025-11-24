@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PAINT PAINT 🎨</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-align: center;
+      overflow: hidden;
+      height: 100vh;
+      touch-action: none;
+    }
+
+    /* Title Screen */
+    #titleScreen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      background: rgba(0,0,0,0.3);
+    }
+    #titleScreen h1 {
+      font-size: 9vw;
+      margin: 0;
+      background: linear-gradient(45deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 30px rgba(255,255,255,0.5);
+      animation: pulse 3s infinite;
+    }
+    #startButton {
+      margin-top: 50px;
+      padding: 20px 60px;
+      font-size: 3vw;
+      font-weight: bold;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      transition: all 0.3s;
+    }
+    #startButton:hover {
+      transform: scale(1.1);
+      background: #45a049;
+    }
+    #startButton:active {
+      transform: scale(0.95);
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    /* Game Screen (hidden at start) */
+    #gameContainer {
+      display: none;
+      padding: 20px;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      background: #222;
+    }
+    canvas {
+      border: 6px solid #fff;
+      border-radius: 15px;
+      background: white;
+      box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+      cursor: crosshair;
+      max-width: 95vw;
+    }
+    .controls {
+      margin: 20px;
+      padding: 15px;
+      background: #333;
+      border-radius: 15px;
+      display: inline-block;
+    }
+    button, input {
+      margin: 8px;
+      padding: 12px;
+      font-size: 18px;
+      border-radius: 10px;
+    }
+    #colorPicker { width: 70px; height: 70px; padding: 0; border: 4px solid white; }
+  </style>
+</head>
+<body>
+
+  <!-- TITLE SCREEN -->
+  <div id="titleScreen">
+    <h1>PAINT PAINT</h1>
+    <button id="startButton">START</button>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="gameContainer">
+    <h1>PAINT PAINT 🎨</h1>
+    <canvas id="canvas" width="900" height="600"></canvas>
+    
+    <div class="controls">
+      <input type="color" id="colorPicker" value="#000000"/>
+      <input type="range" id="brushSize" min="1" max="100" value="10"/>
+      <span id="sizeLabel">Size: 10</span><br/>
+      
+      <button id="rainbowBtn">Rainbow Mode</button>
+      <button id="eraserBtn">Eraser</button>
+      <button id="clearBtn">Clear Canvas</button>
+    </div>
+  </div>
+
+  <script>
+    const titleScreen = document.getElementById('titleScreen');
+    const gameContainer = document.getElementById('gameContainer');
+    const startButton = document.getElementById('startButton');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Start the game when button is clicked
+    startButton.addEventListener('click', () => {
+      titleScreen.style.display = 'none';
+      gameContainer.style.display = 'flex';
+      
+      // Draw welcome text once
+      ctx.fillStyle = '#ddd';
+      ctx.font = '40px Comic Sans MS';
+      ctx.textAlign = 'center';
+      ctx.fillText('Let’s Create Something Awesome! 🎨', canvas.width/2, canvas.height/2);
+    });
+
+    // Make canvas responsive
+    function resizeCanvas() {
+      const ratio = Math.min(window.innerWidth / 950, (window.innerHeight - 300) / 650);
+      canvas.style.width = (900 * ratio) + 'px';
+      canvas.style.height = (600 * ratio) + 'px';
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // Painting logic (same as before, but improved)
+    let painting = false;
+    let rainbowMode = false;
+    let eraserMode = false;
+
+    function startPosition(e) {
+      painting = true;
+      draw(e);
+    }
+    function endPosition() {
+      painting = false;
+      ctx.beginPath();
+    }
+    function draw(e) {
+      if (!painting) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX || e.touches[0].clientX) - rect.left;
+      const y = (e.clientY || e.touches[0].clientY) - rect.top;
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      ctx.lineWidth = brushSize.value;
+      ctx.lineCap = 'round';
+      ctx.shadowBlur = 2;
+      ctx.shadowColor = eraserMode ? 'white' : ctx.strokeStyle;
+
+      if (eraserMode) {
+        ctx.strokeStyle = 'white';
+        ctx.globalCompositeOperation = 'destination-out';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = rainbowMode 
+          ? `hsl(${Date.now() * 0.1 % 360}, 100%, 50%)` 
+          : colorPicker.value;
+      }
+
+      ctx.lineTo(x * scaleX, y * scaleY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x * scaleX, y * scaleY);
+    }
+
+    // Mouse + Touch events
+    ['mousedown', 'touchstart'].forEach(evt => 
+      canvas.addEventListener(evt, e => { e.preventDefault(); startPosition(e); })
+    );
+    ['mouseup', 'mouseout', 'touchend'].forEach(evt => 
+      canvas.addEventListener(evt, endPosition)
+    );
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('touchmove', e => { e.preventDefault(); draw(e); });
+
+    // Controls
+    document.getElementById('brushSize').addEventListener('input', e => {
+      document.getElementById('sizeLabel').textContent = `Size: ${e.target.value}`;
+    });
+
+    document.getElementById('rainbowBtn').addEventListener('click', () => {
+      rainbowMode = !rainbowMode;
+      eraserMode = false;
+      this.style.background = rainbowMode ? 'linear-gradient(45deg, red, orange, yellow, green, blue, violet)' : '';
+      this.style.color = rainbowMode ? 'white' : '';
+    });
+
+    document.getElementById('eraserBtn').addEventListener('click', () => {
+      eraserMode = !eraserMode;
+      rainbowMode = false;
+      this.style.background = eraserMode ? '#fff' : '';
+      this.style.color = eraserMode ? '#000' : '';
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      if (confirm('🗑️ Are you sure you want delete your beautiful artwork?Make sure to take a screenshot if you wanna keep it!!!')) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    });
+
+    // Initial resize
+    resizeCanvas();
+  </script>
+</body>
+</html>

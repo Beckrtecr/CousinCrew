@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PVP of Blocks</title>
+<style>
+  body { margin:0; background:#333; display:flex; justify-content:center; align-items:center; height:100vh; }
+  canvas { background:#8B4513; image-rendering:pixelated; border:8px solid #5D2E0C; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="600"></canvas>
+
+<script>
+// ============== GAME SETUP ==============
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 800;
+canvas.height = 600;
+
+// Collision helper
+function collides(r1, r2) {
+  return r1.x < r2.x + r2.w &&
+         r1.x + r1.w > r2.x &&
+         r1.y < r2.y + r2.h &&
+         r1.y + r1.h > r2.y;
+}
+
+// Player
+const player = {
+  x: 400, y: 300, size: 20, speed: 3.5,
+  color: '#00ff00', health: 100, maxHealth: 100, score: 0,
+  weapon: 'none', // 'sword', 'shield', 'bow'
+  angle: 0
+};
+
+// Globals
+let walls = [];
+let arrows = [];
+let enemies = [];
+let bossProj = [];
+let boss = null;
+let bossUnlocked = false;
+let swordSwingTimer = 0;
+let enemySpawnTimer = 0;
+let gameState = 'title';
+
+// Input
+const keys = {};
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  player.angle = Math.atan2(
+    e.clientY - rect.top - player.y,
+    e.clientX - rect.left - player.x
+  );
+});
+canvas.addEventListener('click', () => {
+  if (gameState === 'title') {
+    startGame();
+    return;
+  }
+  if (gameState === 'won') {
+    resetVars();
+    gameState = 'title';
+    return;
+  }
+  if (player.weapon === 'bow') shootArrow();
+  if (player.weapon === 'sword') swordSwing();
+});
+
+// Weapons
+function equipWeapon(num) {
+  if (num === 1) player.weapon = 'sword';
+  if (num === 2) player.weapon = 'shield';
+  if (num === 3) player.weapon = 'bow';
+}
+
+window.addEventListener('keydown', e => {
+  if (e.key === '1') equipWeapon(1);
+  if (e.key === '2') equipWeapon(2);
+  if (e.key === '3') equipWeapon(3);
+});
+
+// Reset game variables
+function resetVars() {
+  enemies = [];
+  arrows = [];
+  bossProj = [];
+  boss = null;
+  bossUnlocked = false;
+  swordSwingTimer = 0;
+  enemySpawnTimer = 0;
+  player.health = 100;
+  player.score = 0;
+  player.weapon = 'none';
+  player.x = 400;
+  player.y = 300;
+}
+
+// Walls collision check
+function wallCollides(x, y, size) {
+  const rect = {
+    x: x - size / 2,
+    y: y - size / 2,
+    w: size,
+    h: size
+  };
+  return walls.some(w => collides(rect, w));
+}
+
+// Spawn walls
+function spawnWalls() {
+  walls = [];
+  const numWalls = 18;
+  for (let i = 0; i < numWalls; i++) {
+    let placed = false;
+    for (let att = 0; att < 100; att++) {
+      const wallW = 25 + Math.random() * 35;
+      const wallH = 35 + Math.random() * 45;
+      const wallX = 45 + Math.random() * (760 - wallW);
+      const wallY = 45 + Math.random() * (520 - wallH);
+      const rect = { x: wallX, y: wallY, w: wallW, h: wallH };
+
+      // Avoid player spawn area
+      if (collides(rect, { x: 380, y: 280, w: 40, h: 40 })) continue;
+
+      // Check overlap with existing
+      let overlap = false;
+      for (let existing of walls) {
+        if (collides(rect, existing)) {
+          overlap = true;
+          break;
+        }
+      }
+      if (!overlap) {
+        walls.push(rect);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) console.log('Failed to place wall', i);
+  }
+}
+
+// Start Game
+function startGame() {
+  resetVars();
+  spawnWalls();
+  gameState = 'playing';
+}
+
+// Regular Enemies
+function spawnEnemy() {
+  const side = Math.floor(Math.random() * 4);
+  let x, y;
+  if (side === 0) { x = 10 + Math.random() * 780; y = -30; }
+  if (side === 1) { x = 810; y = 10 + Math.random() * 580; }
+  if (side === 2) { x = 10 + Math.random() * 780; y = 610; }
+  if (side === 3) { x = -30; y = 10 + Math.random() * 580; }
+
+  enemies.push({
+    x, y, size: 22,
+    vx: 0, vy: 0,
+    accel: 0.18 + Math.random() * 0.05,
+    maxspeed: 1.4 + Math.random() * 0.6,
+    drag: 0.91 + Math.random() * 0.02,
+    stun: 0,
+    health: 35 + Math.random() * 20,
+    color: '#ff4444'
+  });
+}
+
+// Boss
+function spawnBoss() {
+  let attempts = 0;
+  while (attempts < 100) {
+    const side = Math.floor(Math.random() * 4);
+    let x, y;
+    if (side === 0) { x = 60 + Math.random() * 680; y = -60; }
+    if (side === 1) { x = 820; y = 60 + Math.random() * 480; }
+    if (side === 2) { x = 60 + Math.random() * 680; y = 620; }
+    if (side === 3) { x = -60; y = 60 + Math.random() * 480; }
+    if (!wallCollides(x, y, 40) && Math.hypot(x - player.x, y - player.y) > 150) {
+      boss = {
+        x, y, size: 40,
+        vx: 0, vy: 0,
+        accel: 0.14,
+        maxspeed: 2.4,
+        drag: 0.925,
+        stun: 0,
+        health: 500,
+        maxHealth: 500,
+        attackTimer: 120,
+        angle: 0
+      };
+      return;
+    }
+    attempts++;
+  }
+  console.log('Could not spawn boss');
+}
+
+// Arrows (player)
+function shootArrow() {
+  arrows.push({
+    x: player.x, y: player.y,
+    vx: Math.cos(player.angle) * 11,
+    vy: Math.sin(player.angle) * 11,
+    life: 70
+  });
+}
+
+// Boss projectiles
+function shootBossProj(angle) {
+  bossProj.push({
+    x: boss.x + Math.cos(angle) * 15,
+    y: boss.y + Math.sin(angle) * 15,
+    vx: Math.cos(angle) * 7,
+    vy: Math.sin(angle) * 7,
+    life: 90
+  });
+}
+
+function swordSwing() {
+  if (swordSwingTimer > 0) return;
+  swordSwingTimer = 12;
+  // Hit enemies
+  enemies.forEach(e => {
+    const dx = e.x - player.x;
+    const dy = e.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    const angleToEnemy = Math.atan2(dy, dx);
+    if (dist < 55 && Math.abs(angleToEnemy - player.angle) < 0.7) {
+      e.health -= 45;
+      player.score += 12;
+    }
+  });
+  // Hit boss
+  if (boss) {
+    const dx = boss.x - player.x;
+    const dy = boss.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    const angleToBoss = Math.atan2(dy, dx);
+    if (dist < 65 && Math.abs(angleToBoss - player.angle) < 0.7) {
+      boss.health -= 55;
+      player.score += 25;
+    }
+  }
+}
+
+// Game loop
+function loop() {
+  if (gameState === 'playing') {
+    // Player movement with walls
+    let dx = 0, dy = 0;
+    if (keys['a']) dx -= player.speed;
+    if (keys['d']) dx += player.speed;
+    if (keys['w']) dy -= player.speed;
+    if (keys['s']) dy += player.speed;
+
+    // Move X
+    const newPlayerX = player.x + dx;
+    if (!wallCollides(newPlayerX, player.y, player.size)) {
+      player.x = newPlayerX;
+    }
+    // Move Y
+    const newPlayerY = player.y + dy;
+    if (!wallCollides(player.x, newPlayerY, player.size)) {
+      player.y = newPlayerY;
+    }
+
+    // Bounds
+    player.x = Math.max(20, Math.min(780, player.x));
+    player.y = Math.max(20, Math.min(580, player.y));
+
+    // Spawn boss?
+    if (player.score >= 800 && !bossUnlocked && !boss) {
+      bossUnlocked = true;
+      spawnBoss();
+    }
+
+    // Spawn enemies (controlled spawn rate)
+    enemySpawnTimer++;
+    if (enemySpawnTimer > 120 && enemies.length < 14 && !boss) {
+      spawnEnemy();
+      enemySpawnTimer = 0;
+    }
+
+    // Update enemies (physics-based movement)
+    enemies.forEach(e => {
+      if (e.stun > 0) {
+        e.stun--;
+        return;
+      }
+
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      e.vx += (dx / dist) * e.accel;
+      e.vy += (dy / dist) * e.accel;
+
+      let speed = Math.hypot(e.vx, e.vy);
+      if (speed > e.maxspeed) {
+        e.vx = (e.vx / speed) * e.maxspeed;
+        e.vy = (e.vy / speed) * e.maxspeed;
+      }
+
+      e.vx *= e.drag;
+      e.vy *= e.drag;
+
+      // Wall collision - move X
+      const newEX = e.x + e.vx;
+      if (!wallCollides(newEX, e.y, e.size)) {
+        e.x = newEX;
+      } else {
+        e.vx *= -0.6;
+      }
+
+      // Wall collision - move Y
+      const newEY = e.y + e.vy;
+      if (!wallCollides(e.x, newEY, e.size)) {
+        e.y = newEY;
+      } else {
+        e.vy *= -0.6;
+      }
+    });
+
+    // Update boss
+    if (boss) {
+      if (boss.stun > 0) {
+        boss.stun--;
+      } else {
+        const dx = player.x - boss.x;
+        const dy = player.y - boss.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        boss.vx += (dx / dist) * boss.accel;
+        boss.vy += (dy / dist) * boss.accel;
+
+        let speed = Math.hypot(boss.vx, boss.vy);
+        if (speed > boss.maxspeed) {
+          boss.vx = (boss.vx / speed) * boss.maxspeed;
+          boss.vy = (boss.vy / speed) * boss.maxspeed;
+        }
+
+        boss.vx *= boss.drag;
+        boss.vy *= boss.drag;
+      }
+
+      // Aim and attack
+      boss.angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+      boss.attackTimer = Math.max(0, boss.attackTimer - 1);
+      if (boss.attackTimer === 0) {
+        shootBossProj(boss.angle);
+        boss.attackTimer = 90 + Math.floor(Math.random() * 60);
+      }
+
+      // Move X wall
+      const newBX = boss.x + boss.vx;
+      if (!wallCollides(newBX, boss.y, boss.size)) {
+        boss.x = newBX;
+      } else {
+        boss.vx *= -0.5;
+      }
+
+      // Move Y wall
+      const newBY = boss.y + boss.vy;
+      if (!wallCollides(boss.x, newBY, boss.size)) {
+        boss.y = newBY;
+      } else {
+        boss.vy *= -0.5;
+      }
+
+      // Bounds
+      boss.x = Math.max(25, Math.min(775, boss.x));
+      boss.y = Math.max(25, Math.min(575, boss.y));
+    }
+
+    // Player-Enemy collisions
+    enemies.forEach(e => {
+      const dist = Math.hypot(player.x - e.x, player.y - e.y);
+      if (dist < (player.size + e.size) / 2 && dist > 0) {
+        if (player.weapon === 'shield') {
+          // Bounce enemy back realistically
+          const nx = (e.x - player.x) / dist;
+          const ny = (e.y - player.y) / dist;
+          e.vx = nx * 9;
+          e.vy = ny * 9;
+          e.stun = 35;
+          e.x += nx * 25;
+          e.y += ny * 25;
+          player.score += 8;
+        } else {
+          // Damage player, kill enemy
+          player.health -= 16;
+          e.health = 0;
+        }
+      }
+    });
+
+    // Player-Boss collision
+    if (boss) {
+      const dist = Math.hypot(player.x - boss.x, player.y - boss.y);
+      if (dist < 28 && dist > 0) {
+        const nx = (boss.x - player.x) / dist;
+        const ny = (boss.y - player.y) / dist;
+        if (player.weapon === 'shield') {
+          boss.vx = nx * 6.5;
+          boss.vy = ny * 6.5;
+          boss.stun = 28;
+          boss.x += nx * 25;
+          boss.y += ny * 25;
+          player.score += 12;
+        } else {
+          player.health -= 35;
+          player.x -= nx * 15;
+          player.y -= ny * 15;
+        }
+      }
+    }
+
+    // Update arrows (player)
+    for (let i = arrows.length - 1; i >= 0; i--) {
+      const a = arrows[i];
+      a.x += a.vx;
+      a.y += a.vy;
+      a.life--;
+
+      const aRect = { x: a.x - 3, y: a.y - 3, w: 6, h: 6 };
+      if (a.life <= 0 ||
+          a.x < 0 || a.x > 800 || a.y < 0 || a.y > 600 ||
+          walls.some(w => collides(aRect, w))) {
+        arrows.splice(i, 1);
+        continue;
+      }
+
+      // Hit enemies
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const e = enemies[j];
+        if (Math.hypot(a.x - e.x, a.y - e.y) < 16) {
+          e.health -= 28;
+          arrows.splice(i, 1);
+          player.score += 16;
+          break;
+        }
+      }
+      // Hit boss
+      if (boss && Math.hypot(a.x - boss.x, a.y - boss.y) < 22) {
+        boss.health -= 35;
+        arrows.splice(i, 1);
+        player.score += 20;
+      }
+    }
+
+    // Update boss projectiles
+    for (let i = bossProj.length - 1; i >= 0; i--) {
+      const bp = bossProj[i];
+      bp.x += bp.vx;
+      bp.y += bp.vy;
+      bp.life--;
+
+      const bpRect = { x: bp.x - 5, y: bp.y - 5, w: 10, h: 10 };
+      if (bp.life <= 0 ||
+          bp.x < 0 || bp.x > 800 || bp.y < 0 || bp.y > 600 ||
+          walls.some(w => collides(bpRect, w))) {
+        bossProj.splice(i, 1);
+        continue;
+      }
+
+      // Hit player
+      if (Math.hypot(bp.x - player.x, bp.y - player.y) < 25) {
+        if (player.weapon !== 'shield') {
+          player.health -= 30;
+        }
+        bossProj.splice(i, 1);
+      }
+    }
+
+    // Sword timer
+    if (swordSwingTimer > 0) swordSwingTimer--;
+
+    // Remove dead enemies
+    enemies = enemies.filter(e => e.health > 0);
+
+    // Check boss defeated
+    if (boss && boss.health <= 0) {
+      player.score += 1000;
+      alert(`BOSS SLAYED! +1000 pts\nNew Score: ${player.score}`);
+      boss = null;
+    }
+
+    // Win condition
+    if (player.score >= 7000) {
+      gameState = 'won';
+    }
+
+    // Game over
+    if (player.health <= 0) {
+      alert(`GAME OVER! Final Score: ${player.score}`);
+      resetVars();
+      gameState = 'title';
+    }
+  }
+
+  // DRAW
+  ctx.fillStyle = '#8B4513';
+  ctx.fillRect(0, 0, 800, 600);
+
+  // Arena border
+  ctx.strokeStyle = '#5D2E0C';
+  ctx.lineWidth = 20;
+  ctx.strokeRect(10, 10, 780, 580);
+
+  if (gameState === 'title') {
+    // Title screen
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 80px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('PVP', 400, 200);
+    ctx.fillText('OF', 400, 280);
+    ctx.fillText('BLOCKS', 400, 360);
+    ctx.font = 'bold 42px monospace';
+    ctx.fillText('Click to start', 400, 470);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  } else if (gameState === 'won') {
+    // Win screen
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 80px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('YOU', 400, 220);
+    ctx.fillText('WON', 400, 300);
+    ctx.font = 'bold 36px monospace';
+    ctx.fillText(`Final Score: ${player.score}`, 400, 410);
+    ctx.font = 'bold 42px monospace';
+    ctx.fillText('Click to restart', 400, 470);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  } else {
+    // Game screen
+    // Walls
+    ctx.fillStyle = '#4A2C0A';
+    walls.forEach(w => {
+      ctx.fillRect(w.x, w.y, w.w, w.h);
+    });
+    ctx.strokeStyle = '#2A1C0A';
+    ctx.lineWidth = 2;
+    walls.forEach(w => {
+      ctx.strokeRect(w.x, w.y, w.w, w.h);
+    });
+
+    // Player
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+
+    // Body
+    ctx.fillStyle = player.weapon === 'shield' ? '#00ccff' : '#00ff00';
+    ctx.fillRect(-10, -10, 20, 20);
+
+    // Weapons
+    if (player.weapon === 'sword' && swordSwingTimer > 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(12, -5, 35, 10);
+    } else if (player.weapon === 'sword') {
+      ctx.fillStyle = '#cccccc';
+      ctx.fillRect(12, -3, 28, 6);
+    }
+
+    if (player.weapon === 'shield') {
+      ctx.fillStyle = '#6666ff';
+      ctx.fillRect(13, -14, 16, 28);
+      ctx.fillStyle = '#4444dd';
+      ctx.fillRect(15, -10, 12, 20);
+    }
+
+    if (player.weapon === 'bow') {
+      ctx.strokeStyle = '#8B4513';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(12, -12);
+      ctx.lineTo(25, 0);
+      ctx.lineTo(12, 12);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Player arrows
+    arrows.forEach(a => {
+      ctx.fillStyle = '#ffff00';
+      ctx.save();
+      ctx.translate(a.x, a.y);
+      ctx.rotate(Math.atan2(a.vy, a.vx));
+      ctx.fillRect(-4, -2, 8, 4);
+      ctx.restore();
+    });
+
+    // Enemies
+    enemies.forEach(e => {
+      ctx.fillStyle = e.health < 20 ? '#ff5555' : '#ff0000';
+      ctx.fillRect(e.x - 11, e.y - 11, 22, 22);
+      // Health bar
+      ctx.fillStyle = '#ff8888';
+      ctx.fillRect(e.x - 9, e.y - 16, 18, 4);
+      ctx.fillStyle = '#00ff00';
+      ctx.fillRect(e.x - 9, e.y - 16, 18 * (e.health / 55), 4);
+    });
+
+    // Boss
+    if (boss) {
+      ctx.fillStyle = boss.health < 250 ? '#ff55ff' : '#aa00ff';
+      ctx.fillRect(boss.x - 20, boss.y - 20, 40, 40);
+      // Spikes
+      ctx.strokeStyle = '#cc44ff';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(boss.x + 20, boss.y);
+      ctx.lineTo(boss.x + 35, boss.y - 12);
+      ctx.moveTo(boss.x + 20, boss.y);
+      ctx.lineTo(boss.x + 35, boss.y + 12);
+      ctx.stroke();
+
+      // Boss health bar
+      const bossPct = boss.health / boss.maxHealth;
+      ctx.fillStyle = '#00000088';
+      ctx.fillRect(boss.x - 20, boss.y - 28, 40, 6);
+      ctx.fillStyle = bossPct > 0.5 ? '#00ff00' : bossPct > 0.2 ? '#ffff00' : '#ff0000';
+      ctx.fillRect(boss.x - 18, boss.y - 26, 36 * bossPct, 4);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(boss.x - 18, boss.y - 26, 36, 4);
+    }
+
+    // Boss projectiles
+    bossProj.forEach(bp => {
+      ctx.fillStyle = '#aa0000';
+      ctx.save();
+      ctx.translate(bp.x, bp.y);
+      ctx.rotate(Math.atan2(bp.vy, bp.vx));
+      ctx.fillRect(-6, -3, 12, 6);
+      ctx.restore();
+    });
+
+    // UI - Health
+    ctx.fillStyle = '#00000088';
+    ctx.fillRect(20, 20, 200, 30);
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(25, 25, 190 * (player.health / player.maxHealth), 20);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(25, 25, 190, 20);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText(`Health: ${Math.max(0, player.health)}`, 30, 44);
+
+    // UI - Score
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px monospace';
+    ctx.fillText(`Score: ${player.score}`, 550, 48);
+
+    // UI - Weapons
+    ctx.font = '20px monospace';
+    ctx.fillText(`Weapon: ${player.weapon.toUpperCase()}`, 20, 85);
+    ctx.fillText(`1=Sword  2=Shield  3=Bow`, 20, 115);
+    ctx.fillText(`WASD Move | Mouse Aim | Click Attack`, 20, 140);
+
+    // UI - Boss Alert
+    if (boss) {
+      ctx.fillStyle = '#ff000088';
+      ctx.fillRect(250, 30, 300, 110);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 48px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('BOSS!', 400, 80);
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText(`${Math.floor(boss.health)} / 500 HP`, 400, 115);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
