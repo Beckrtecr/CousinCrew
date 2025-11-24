@@ -8,38 +8,55 @@ body { margin:0; background:#87CEEB; overflow:hidden; font-family:Arial; }
 canvas { display:block; }
 #ui { position:absolute; top:10px; left:10px; color:#0ff; font: bold 32px Arial; text-shadow:0 0 10px #0ff; z-index:10; }
 #gunui { position:absolute; top:50px; left:10px; color:#ff0; font: bold 32px Arial; text-shadow:0 0 10px #ff0; z-index:10; }
-#start, #gameover {
+#start, #gameover, #victory {
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
     text-align:center; cursor:pointer; z-index:20; user-select:none;
 }
 #start { font:bold 72px Arial; color:#fff; text-shadow:0 0 20px #000; display:block; }
 #gameover { font:bold 90px Arial; color:#f00; text-shadow:0 0 20px red; display:none; }
-
+#victory { 
+    font:bold 80px Arial; 
+    color:#ffff00; 
+    text-shadow:0 0 30px #ff0, 0 0 60px #ff0; 
+    display:none;
+    line-height:1.4;
+}
+#victory span { font-size:60px; display:block; margin-top:40px; color:#fff; text-shadow:0 0 20px #000; }
 #instructions { position:absolute; bottom:10px; left:10px; color:#fff; font:18px Arial; text-shadow:2px 4px #000; }
 </style>
 </head>
 <body>
 <div id="ui">SCORE: <span id="score">0</span></div>
 <div id="gunui">GUN LV: <span id="gunlvl">0</span></div>
+
 <div id="start">SUPER SEAGULLS<br><span style="font-size:50px">Click to play</span></div>
+
 <div id="gameover">
     YOU WERE SEAGULLED!<br><br>
     <span style="font-size:50px">Final Score: <span id="finalscore">0</span></span><br><br>
     <span style="font-size:45px">Gun Lv: <span id="finalgun">0</span></span><br><br>
     <span style="font-size:40px">Click to try again</span>
 </div>
-<div id="instructions">WASD/Arrows = Fly  Mouse = Aim & Shoot  4 Guns = GOD MODE</div>
+
+<div id="victory">
+    VICTORY!<br>
+    YOU DESTROYED<br>THE KING OF THE SEAGULLS<br>THE BALD EAGLE
+    <span>click to play again</span>
+</div>
+
+<div id="instructions">WASD/Arrows = Fly    Mouse = Aim & Shoot    4 Guns = GOD MODE</div>
 <canvas id="c"></canvas>
 
 <script>
-// =============== SUPER SEAGULLS - FIXED & FINAL ===============
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 canvas.width = innerWidth;
 canvas.height = innerHeight;
 
-let score = 0, upgradeLevel = 0, gameOver = false, started = false;
+let score = 0, upgradeLevel = 0, gameOver = false, victory = false, started = false;
 let boss = null, nextBossScore = 800;
+let bossesDefeated = 0;
+
 const player = { x: canvas.width/2, y: canvas.height/2, radius: 20, speed: 7.2, wingAngle: 0, wingSpeed: 0.5 };
 const bullets = [], enemies = [], powerups = [], bossBullets = [];
 let mouse = { x: canvas.width/2, y: canvas.height/2 };
@@ -49,7 +66,9 @@ const scoreUI = document.getElementById('score');
 const gunUI = document.getElementById('gunlvl');
 const startScreen = document.getElementById('start');
 const gameOverScreen = document.getElementById('gameover');
+const victoryScreen = document.getElementById('victory');
 
+/* ────────────────────── DRAW FUNCTIONS ────────────────────── */
 function drawSeagull(x, y, radius, isPlayer = false, isRed = false) {
     ctx.save();
     const body = isRed ? '#ff2222' : '#f5f5dc';
@@ -59,11 +78,9 @@ function drawSeagull(x, y, radius, isPlayer = false, isRed = false) {
     
     ctx.fillStyle = body; ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = wing;
-    // Left wing
     ctx.beginPath(); ctx.moveTo(x - radius*0.7, y);
     ctx.quadraticCurveTo(x - radius*(1.6 + flap), y - radius*0.6, x - radius*1.1, y + radius*0.3);
     ctx.quadraticCurveTo(x - radius*0.7, y + radius*0.2, x - radius*0.4, y); ctx.closePath(); ctx.fill();
-    // Right wing
     ctx.beginPath(); ctx.moveTo(x + radius*0.7, y);
     ctx.quadraticCurveTo(x + radius*(1.6 + flap), y - radius*0.6, x + radius*1.1, y + radius*0.3);
     ctx.quadraticCurveTo(x + radius*0.7, y + radius*0.2, x + radius*0.4, y); ctx.closePath(); ctx.fill();
@@ -88,7 +105,6 @@ function drawBaldEagle(x, y, r) {
     ctx.fillStyle = '#8B4513'; ctx.beginPath(); ctx.ellipse(x, y, r*0.9, r*1.1, 0, 0, Math.PI*2); ctx.fill();
     const flap = Math.sin(Date.now() * 0.012) * 0.6;
     ctx.fillStyle = '#A0522D';
-    // Wings
     ctx.beginPath(); ctx.moveTo(x - r*0.8, y);
     ctx.quadraticCurveTo(x - r*2.4, y - r*0.8 + flap, x - r*1.8, y + r*0.6);
     ctx.quadraticCurveTo(x - r*1.0, y + r*0.4, x - r*0.6, y); ctx.closePath(); ctx.fill();
@@ -101,7 +117,6 @@ function drawBaldEagle(x, y, r) {
     ctx.beginPath(); ctx.moveTo(x + r*0.4, y - r*0.5); ctx.lineTo(x + r*1.4, y - r*0.4);
     ctx.lineTo(x + r*1.0, y - r*0.2); ctx.lineTo(x + r*0.5, y - r*0.4); ctx.closePath(); ctx.fill();
 
-    // HP bar
     const hp = boss.health / boss.maxHealth;
     const w = 180;
     ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(x - w/2, y - r - 40, w, 22);
@@ -111,6 +126,7 @@ function drawBaldEagle(x, y, r) {
     ctx.restore();
 }
 
+/* ────────────────────── GAME FUNCTIONS ────────────────────── */
 function shoot() {
     const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
     const spread = upgradeLevel * 0.32;
@@ -145,6 +161,7 @@ function spawnPowerup() {
 
 function resetGame() {
     score = 0; upgradeLevel = 0; boss = null; nextBossScore = 800;
+    bossesDefeated = 0; victory = false; gameOver = false;
     scoreUI.textContent = '0'; gunUI.textContent = '0';
     bullets.length = enemies.length = powerups.length = bossBullets.length = 0;
     player.x = canvas.width/2; player.y = canvas.height/2; player.wingAngle = 0;
@@ -153,31 +170,29 @@ function resetGame() {
 function startGame() {
     started = true;
     gameOver = false;
+    victory = false;
     startScreen.style.display = 'none';
     gameOverScreen.style.display = 'none';
+    victoryScreen.style.display = 'none';
     resetGame();
 }
 
-// Click handler - FIXED
+/* ────────────────────── INPUT ────────────────────── */
 canvas.addEventListener('click', (e) => {
-    if (e.target !== canvas) return; // Ignore clicks on UI overlays
     if (!started) startGame();
-    else if (gameOver) startGame(); // This was the bug! Now restarts properly
+    else if (gameOver || victory) startGame();
     else shoot();
 });
-
-// Also allow clicking directly on the game over screen (extra safety)
-gameOverScreen.addEventListener('click', () => {
-    if (gameOver) startGame();
-});
+gameOverScreen.onclick = victoryScreen.onclick = startGame;
 
 addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 const keys = {};
 addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
+/* ────────────────────── MAIN LOOP ────────────────────── */
 function loop() {
-    if (!started || gameOver) {
+    if (!started || gameOver || victory) {
         requestAnimationFrame(loop);
         return;
     }
@@ -195,7 +210,6 @@ function loop() {
     player.x = Math.max(30, Math.min(canvas.width-30, player.x));
     player.y = Math.max(30, Math.min(canvas.height-30, player.y));
 
-    // Auto-shoot at level 4
     if (upgradeLevel >= 4 && Math.random() < 0.45) shoot();
 
     // Boss spawn
@@ -204,13 +218,13 @@ function loop() {
         nextBossScore += 1200;
     }
 
-    // Enemy & powerup spawn
+    // Spawning
     if (++spawnTimer > 40) { spawnTimer = 0; spawnRedSeagull();
         if (score > 400 && Math.random() < 0.5) spawnRedSeagull();
     }
     if (++powerupTimer > 400 && powerups.length < 3) { powerupTimer = 0; spawnPowerup(); }
 
-    // Update bullets
+    // Bullets
     for (let i = bullets.length-1; i >= 0; i--) {
         const b = bullets[i];
         b.x += b.vx; b.y += b.vy; b.life--;
@@ -226,17 +240,17 @@ function loop() {
         const dist = Math.hypot(dx, dy) || 1;
         e.x += dx/dist * e.speed; e.y += dy/dist * e.speed;
         drawSeagull(e.x, e.y, e.radius, false, true);
-
         if (dist < player.radius + e.radius + 8) gameOver = true;
 
         for (let j = bullets.length-1; j >= 0; j--) {
             if (Math.hypot(bullets[j].x - e.x, bullets[j].y - e.y) < bullets[j].size + e.radius) {
-                bullets.splice(j,1); enemies.splice(i,1); score += 10; scoreUI.textContent = score; break;
+                bullets.splice(j,1); enemies.splice(i,1); score += 10; scoreUI.textContent = score;
+                break;
             }
         }
     }
 
-    // Boss
+    // BOSS - VICTORY HAPPENS HERE
     if (boss) {
         const dx = player.x - boss.x, dy = player.y - boss.y;
         const dist = Math.hypot(dx, dy) || 1;
@@ -252,10 +266,18 @@ function loop() {
 
         for (let j = bullets.length-1; j >= 0; j--) {
             if (Math.hypot(bullets[j].x - boss.x, bullets[j].y - boss.y) < bullets[j].size + boss.radius) {
-                bullets.splice(j,1); boss.health--;
+                bullets.splice(j,1);
+                boss.health--;
                 if (boss.health <= 0) {
-                    score += 500; scoreUI.textContent = score; boss = null;
+                    score += 500;
+                    scoreUI.textContent = score;
+                    bossesDefeated++;
+                    boss = null;
                     for (let k = 0; k < 5; k++) spawnPowerup();
+
+                    victory = true;
+                    victoryScreen.style.display = 'block';
+                    return; // stops everything instantly
                 }
             }
         }
