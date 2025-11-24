@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Medieval Tower Defense</title>
+<style>
+  body { margin:0; background:#222; font-family:Arial; color:white; }
+  canvas { background:#228B22; display:block; margin:20px auto; border:4px solid #8B4513; cursor: default; }
+  #ui {
+    position:absolute; top:20px; right:20px; background:rgba(0,0,0,0.7); padding:15px; border-radius:10px;
+    min-width:200px; text-align:center;
+  }
+  button {
+    margin:10px 0; padding:10px 20px; font-size:14px; cursor:pointer; width:95%;
+    background:#8B4513; color:white; border:none; border-radius:5px;
+  }
+  button:hover:not(:disabled) { background:#A0522D; }
+  button:disabled { background:#555; cursor:not-allowed; }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="1000" height="600"></canvas>
+
+<div id="ui">
+  <h2>🏰 Medieval Defense</h2>
+  <div>Gold: <span id="gold">200</span></div>
+  <div>Lives: <span id="lives">20</span></div>
+  <div>Wave: <span id="wave">0</span></div>
+  <hr>
+  <button id="archer">🏹 Archer (50g)</button><br>
+  <button id="cannon">💣 Cannon (120g)</button><br>
+  <button id="wizard">🧙 Wizard (200g)</button><br>
+  <button id="ice">🧊 Ice (80g)</button><br>
+  <button id="catapult">🎯 Catapult (150g)</button><br>
+  <button id="nextWave">⚔️ Next Wave (SPACE)</button>
+</div>
+
+<script>
+// ==================== GAME SETUP ====================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const goldEl = document.getElementById('gold');
+const livesEl = document.getElementById('lives');
+const waveEl = document.getElementById('wave');
+const ui = document.getElementById('ui');
+
+let state = 'title';  // 'title', 'playing', 'victory', 'gameOver'
+let gold = 200, lives = 20, wave = 0;
+let enemies = [], towers = [], projectiles = [];
+let placingTower = null;
+let gameOver = false;
+let victory = false;
+let mouseX = 0, mouseY = 0;
+let hoveredTower = null;
+let draggingTower = null;
+let origPos = null;
+let startBtnRect = {x: 0, y: 0, w: 0, h: 0};
+
+ui.style.opacity = '0.5';
+
+function setUiActive(active) {
+  ui.style.opacity = active ? '1' : '0.5';
+}
+
+// Path enemies follow
+const PATH = [
+  {x:0, y:300}, {x:150,y:300}, {x:150,y:150}, {x:450,y:150},
+  {x:450,y:450}, {x:750,y:450}, {x:750,y:200}, {x:950,y:200}
+];
+
+// Tower definitions
+const TOWERS = {
+  archer: {cost:50, range:140, damage:20, cooldown:40, color:'#8B4513', projColor:'#228B22', effect:null},
+  cannon: {cost:120, range:180, damage:60, cooldown:90, color:'#555', projColor:'#333', effect:null},
+  wizard: {cost:200, range:200, damage:35, cooldown:30, color:'#9400D3', projColor:'#FF00FF', effect:null},
+  ice: {cost:80, range:160, damage:15, cooldown:50, color:'#00BFFF', projColor:'#00FFFF', effect:'slow'},
+  catapult: {cost:150, range:220, damage:50, cooldown:120, color:'#D2691E', projColor:'#FF4500', effect:'aoe'}
+};
+
+// ==================== HELPER FUNCTIONS ====================
+function drawPath() {
+  ctx.strokeStyle = '#8B6914';
+  ctx.lineWidth = 40;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(PATH[0].x, PATH[0].y);
+  for(let i=1; i<PATH.length; i++) ctx.lineTo(PATH[i].x, PATH[i].y);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#A08020';
+  ctx.lineWidth = 34;
+  ctx.beginPath();
+  ctx.moveTo(PATH[0].x, PATH[0].y);
+  for(let i=1; i<PATH.length; i++) ctx.lineTo(PATH[i].x, PATH[i].y);
+  ctx.stroke();
+}
+
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function nearPath(x, y) {
+  for(let i=0; i<PATH.length-1; i++) {
+    const a = PATH[i], b = PATH[i+1];
+    const d = Math.abs((b.y-a.y)*(a.x-x) - (b.x-a.x)*(a.y-y)) / dist(a, b);
+    if (d < 50) return true;
+  }
+  return false;
+}
+
+function updateButtons() {
+  ['archer','cannon','wizard','ice','catapult'].forEach(id => {
+    document.getElementById(id).disabled = gold < TOWERS[id].cost;
+  });
+}
+
+function restart() {
+  gold = 200; lives = 20; wave = 0;
+  enemies.length = 0; towers.length = 0; projectiles.length = 0;
+  placingTower = null; victory = false; gameOver = false;
+  state = 'title';
+  goldEl.textContent = 200;
+  livesEl.textContent = 20;
+  waveEl.textContent = 0;
+  setUiActive(false);
+  updateButtons();
+}
+
+// ==================== ENEMY CLASS ====================
+class Enemy {
+  constructor() {
+    this.path = [...PATH];
+    this.pos = {x: this.path[0].x, y: this.path[0].y};
+    this.index = 0;
+    this.hp = 50 + wave * 12;
+    this.maxHp = this.hp;
+    this.speed = 0.8 + wave * 0.05;
+    this.reward = 15 + wave * 3;
+    this.leakDamage = 1;
+    this.slowMultiplier = 1.0;
+    this.slowTimer = 0;
+  }
+  update() {
+    if (this.slowTimer > 0) {
+      this.slowTimer--;
+      if (this.slowTimer <= 0) this.slowMultiplier = 1.0;
+    }
+    const effectiveSpeed = this.speed * this.slowMultiplier;
+
+    if (this.index >= this.path.length - 1) {
+      lives -= this.leakDamage;
+      livesEl.textContent = lives;
+      if (lives <= 0) gameOver = true;
+      return false;
+    }
+    const target = this.path[this.index + 1];
+    const dx = target.x - this.pos.x;
+    const dy = target.y - this.pos.y;
+    const d = Math.hypot(dx, dy);
+    if (d < effectiveSpeed) {
+      this.index++;
+    } else {
+      this.pos.x += dx / d * effectiveSpeed;
+      this.pos.y += dy / d * effectiveSpeed;
+    }
+    return true;
+  }
+  draw() {
+    ctx.fillStyle = '#DC143C';
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#444';
+    ctx.fillRect(this.pos.x - 12, this.pos.y - 18, 24, 10);
+
+    ctx.fillStyle = 'red';
+    ctx.fillRect(this.pos.x - 18, this.pos.y - 28, 36, 6);
+    ctx.fillStyle = 'lime';
+    ctx.fillRect(this.pos.x - 18, this.pos.y - 28, 36 * (this.hp / this.maxHp), 6);
+  }
+}
+
+// ==================== BOSS CLASS ====================
+class Boss {
+  constructor() {
+    this.path = [...PATH];
+    this.pos = {x: this.path[0].x, y: this.path[0].y};
+    this.index = 0;
+    this.hp = 800 + wave * 100;
+    this.maxHp = this.hp;
+    this.speed = 0.6;
+    this.reward = 400 + wave * 50;
+    this.size = 28;
+    this.leakDamage = 5;
+    this.slowMultiplier = 1.0;
+    this.slowTimer = 0;
+  }
+  update() {
+    if (this.slowTimer > 0) {
+      this.slowTimer--;
+      if (this.slowTimer <= 0) this.slowMultiplier = 1.0;
+    }
+    const effectiveSpeed = this.speed * this.slowMultiplier;
+
+    if (this.index >= this.path.length - 1) {
+      lives -= this.leakDamage;
+      livesEl.textContent = lives;
+      if (lives <= 0) gameOver = true;
+      return false;
+    }
+    const target = this.path[this.index + 1];
+    const dx = target.x - this.pos.x;
+    const dy = target.y - this.pos.y;
+    const d = Math.hypot(dx, dy);
+    if (d < effectiveSpeed) {
+      this.index++;
+    } else {
+      this.pos.x += dx / d * effectiveSpeed;
+      this.pos.y += dy / d * effectiveSpeed;
+    }
+    return true;
+  }
+  draw() {
+    ctx.fillStyle = '#4B0082';
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FF4500';
+    ctx.beginPath();
+    ctx.arc(this.pos.x - 10, this.pos.y - 4, 5, 0, Math.PI * 2);
+    ctx.arc(this.pos.x + 10, this.pos.y - 4, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#333';
+    ctx.fillRect(this.pos.x - 22, this.pos.y - 28, 44, 18);
+
+    const barWidth = 60;
+    ctx.fillStyle = 'red';
+    ctx.fillRect(this.pos.x - 30, this.pos.y - 48, barWidth, 10);
+    ctx.fillStyle = 'lime';
+    ctx.fillRect(this.pos.x - 30, this.pos.y - 48, barWidth * (this.hp / this.maxHp), 10);
+
+    ctx.strokeStyle = 'rgba(255,0,0,0.6)';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.size + 15, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// ==================== TOWER & PROJECTILE ====================
+class Tower {
+  constructor(x, y, type) {
+    this.x = x; this.y = y; this.type = type;
+    const t = TOWERS[type];
+    this.range = t.range; this.damage = t.damage; 
+    this.cooldown = t.cooldown; this.color = t.color; 
+    this.projColor = t.projColor; this.effect = t.effect;
+    this.timer = 0;
+  }
+  update() {
+    if (this.timer-- > 0) return;
+    let closest = null, minDist = this.range;
+    for (const e of enemies) {
+      const d = dist(this, e.pos);
+      if (d < minDist) { 
+        minDist = d; 
+        closest = e; 
+      }
+    }
+    if (closest) {
+      projectiles.push(new Projectile(this.x, this.y, closest, this.damage, this.projColor, this.effect));
+      this.timer = this.cooldown;
+    }
+  }
+  draw() {
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x - 20, this.y - 20, 40, 40);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(this.x - 12, this.y - 12, 24, 24);
+    if (hoveredTower === this || draggingTower === this) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+}
+
+class Projectile {
+  constructor(x, y, target, damage, color, effect) {
+    this.x = x; this.y = y;
+    this.target = target;
+    this.damage = damage;
+    this.color = color;
+    this.effect = effect;
+  }
+  update() {
+    if (!enemies.includes(this.target)) return false;
+    const dx = this.target.pos.x - this.x;
+    const dy = this.target.pos.y - this.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 10) {
+      this.target.hp -= this.damage;
+      const impactX = this.target.pos.x;
+      const impactY = this.target.pos.y;
+      if (this.effect === 'slow' && this.target.hp > 0) {
+        this.target.slowMultiplier = 0.5;
+        this.target.slowTimer = 120;
+      } else if (this.effect === 'aoe') {
+        for (const e of enemies) {
+          if (e !== this.target) {
+            const ed = dist({x: impactX, y: impactY}, e.pos);
+            if (ed < 60) {
+              e.hp -= this.damage * 0.6;
+            }
+          }
+        }
+      }
+      return false;
+    }
+    this.x += dx / d * 10;
+    this.y += dy / d * 10;
+    return true;
+  }
+  draw() {
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ==================== WAVE SYSTEM ====================
+function spawnWave() {
+  if (enemies.length > 0 || wave >= 10 || gameOver || victory) return;
+  wave++;
+  waveEl.textContent = wave;
+  const count = 8 + wave * 3;
+  const spawnDelay = 500;
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => enemies.push(new Enemy()), i * spawnDelay);
+  }
+  if (wave === 10) {
+    setTimeout(() => enemies.push(new Boss()), Math.floor(count / 2) * spawnDelay);
+  }
+}
+
+// ==================== INPUT ====================
+canvas.addEventListener('mousemove', (e) => {
+  if (state !== 'playing') {
+    canvas.style.cursor = 'default';
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+
+  hoveredTower = null;
+  for (const t of towers) {
+    if (dist(t, {x: mouseX, y: mouseY}) < 25) {
+      hoveredTower = t;
+      break;
+    }
+  }
+
+  if (draggingTower) {
+    draggingTower.x = mouseX;
+    draggingTower.y = mouseY;
+    canvas.style.cursor = 'grabbing';
+  } else if (placingTower) {
+    canvas.style.cursor = nearPath(mouseX, mouseY) ? 'not-allowed' : 'pointer';
+  } else {
+    canvas.style.cursor = hoveredTower ? 'pointer' : 'default';
+  }
+});
+
+canvas.addEventListener('mousedown', (e) => {
+  if (state === 'title') {
+    if (mouseX >= startBtnRect.x && mouseX <= startBtnRect.x + startBtnRect.w &&
+        mouseY >= startBtnRect.y && mouseY <= startBtnRect.y + startBtnRect.h) {
+      state = 'playing';
+      setUiActive(true);
+    }
+    return;
+  }
+  if (state !== 'playing') return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  for (const t of towers) {
+    if (dist(t, {x, y}) < 25) {
+      draggingTower = t;
+      origPos = {x: t.x, y: t.y};
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
+  }
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if (state !== 'playing') return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (draggingTower) {
+    if (nearPath(x, y)) {
+      draggingTower.x = origPos.x;
+      draggingTower.y = origPos.y;
+    }
+    draggingTower = null;
+    origPos = null;
+  } else if (placingTower && gold >= TOWERS[placingTower].cost && !nearPath(x, y)) {
+    towers.push(new Tower(x, y, placingTower));
+    gold -= TOWERS[placingTower].cost;
+    goldEl.textContent = gold;
+    placingTower = null;
+    updateButtons();
+  }
+  canvas.style.cursor = 'default';
+});
+
+// Tower buttons
+['archer', 'cannon', 'wizard', 'ice', 'catapult'].forEach(id => {
+  document.getElementById(id).onclick = () => {
+    if (state === 'playing') placingTower = id;
+  };
+});
+document.getElementById('nextWave').onclick = () => {
+  if (state === 'playing') spawnWave();
+};
+
+document.addEventListener('keydown', (e) => {
+  if (state === 'title' && e.code === 'Space') {
+    e.preventDefault();
+    state = 'playing';
+    setUiActive(true);
+    return;
+  }
+  if (state !== 'playing') return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    spawnWave();
+  } else if ((victory || gameOver) && e.code === 'KeyR') {
+    e.preventDefault();
+    restart();
+  }
+});
+
+// ==================== GAME LOOP ====================
+function update() {
+  // Handle deaths and movement
+  enemies = enemies.filter(e => {
+    if (e.hp <= 0) {
+      gold += e.reward;
+      goldEl.textContent = gold;
+      updateButtons();
+      return false;
+    }
+    return e.update();
+  });
+
+  // Check victory
+  if (wave === 10 && enemies.length === 0 && !victory && !gameOver) {
+    victory = true;
+  }
+
+  towers.forEach(t => t.update());
+  projectiles = projectiles.filter(p => p.update());
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawPath();
+  enemies.forEach(e => e.draw());
+  towers.forEach(t => t.draw());
+  projectiles.forEach(p => p.draw());
+
+  // Placing preview
+  if (placingTower && state === 'playing') {
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    const t = TOWERS[placingTower];
+    ctx.fillStyle = t.color;
+    ctx.fillRect(mouseX - 20, mouseY - 20, 40, 40);
+    ctx.fillStyle = '#555';
+    ctx.fillRect(mouseX - 12, mouseY - 12, 24, 24);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(mouseX, mouseY, t.range, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Next wave prompt
+  if (state === 'playing' && enemies.length === 0 && !gameOver && !victory && wave < 10 && wave > 0) {
+    ctx.save();
+    ctx.font = 'bold 36px Arial';
+    ctx.fillStyle = 'yellow';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 4;
+    ctx.fillText('Next Wave Ready!', canvas.width / 2, 80);
+    ctx.restore();
+  }
+
+  // Title screen
+  if (state === 'title') {
+    ctx.fillStyle = 'rgba(20,40,20,0.95)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 120px Arial';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 15;
+    ctx.fillText('TOWER', canvas.width / 2, canvas.height / 2 - 40);
+    ctx.fillText('DEFENCE', canvas.width / 2, canvas.height / 2 + 80);
+    ctx.shadowBlur = 0;
+
+    // Start button
+    startBtnRect.x = (canvas.width - 350) / 2;
+    startBtnRect.y = canvas.height / 2 + 150;
+    startBtnRect.w = 350;
+    startBtnRect.h = 90;
+    const bx = startBtnRect.x, by = startBtnRect.y, bw = startBtnRect.w, bh = startBtnRect.h;
+
+    const gradient = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
+    gradient.addColorStop(0, '#CD853F');
+    gradient.addColorStop(1, '#8B4513');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(bx, by, bw, bh);
+
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 55px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('START GAME', canvas.width / 2, by + 62);
+    ctx.shadowBlur = 0;
+
+    ctx.font = 'bold 32px Arial';
+    ctx.fillStyle = '#DAA520';
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 5;
+    ctx.fillText('Click Here or Press SPACE', canvas.width / 2, by + 140);
+    ctx.shadowBlur = 0;
+  }
+
+  // Victory screen
+  if (victory) {
+    ctx.fillStyle = 'rgba(0,100,0,0.9)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'gold';
+    ctx.font = 'bold 80px Arial';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 12;
+    ctx.fillText('VICTORY!', canvas.width / 2, canvas.height / 2);
+    ctx.font = 'bold 42px Arial';
+    ctx.fillText('Kingdom Defended!', canvas.width / 2, canvas.height / 2 + 80);
+    ctx.fillText('Press R to Play Again', canvas.width / 2, canvas.height / 2 + 150);
+    ctx.shadowBlur = 0;
+  }
+
+  // Game Over screen
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(100,0,0,0.9)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'red';
+    ctx.font = 'bold 80px Arial';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 12;
+    ctx.fillText('DEFEAT!', canvas.width / 2, canvas.height / 2);
+    ctx.font = 'bold 42px Arial';
+    ctx.fillStyle = '#FF4444';
+    ctx.fillText('Castle Fallen!', canvas.width / 2, canvas.height / 2 + 80);
+    ctx.fillStyle = 'white';
+    ctx.fillText('Press R to Play Again', canvas.width / 2, canvas.height / 2 + 150);
+    ctx.shadowBlur = 0;
+  }
+}
+
+function loop() {
+  if (state === 'playing') update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Init
+updateButtons();
+loop();
+</script>
+
+<h2 style="text-align:center; color:#8B4513; margin-top:650px;">
+  🏰 Drag towers! | 🧊Ice slows | 🎯Catapult AoE | Waves get HARDER! | Beat Wave 10 Boss Ape for VICTORY! ⚔️🐒
+</h2>
+
+</body>
+</html>

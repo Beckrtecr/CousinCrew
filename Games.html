@@ -9,14 +9,88 @@
     <title>CousinCrew</title>
     <link rel="stylesheet" href="styles.css">
     <style>
+        .header {
+            padding: 12px;
+            background-color: rgb(0, 0, 255);
+            color: #ffffff;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .iframe {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 30px 0;
+        }
+
+        /* SEARCH BAR — CLEAN & CENTERED */
+        .search-wrapper {
+            margin: 30px auto;
+            max-width: 600px;
+            position: relative;
+            width: 90%;
+        }
+
+        #searchInput {
+            width: 100%;
+            padding: 14px 56px 14px 18px;
+            font-size: 1.2rem;
+            border: 3px solid #007bff;
+            border-radius: 12px;
+            outline: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px;
+            height: 28px;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>');
+            background-size: contain;
+            background-repeat: no-repeat;
+            cursor: pointer;
+        }
+
+        .suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #007bff;
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            max-height: 240px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            display: none;
+        }
+
+        .suggestion-item {
+            padding: 14px 18px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .suggestion-item:hover {
+            background-color: #e3f2fd;
+        }
     </style>
 </head>
 
 <body>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous">
-        </script>
+    </script>
+
     <div class="header">Games</div>
+
     <div class="layout">
         <div class="sidebar">
             <a href="index.html" class="btn btn-outline-primary">Home</a>
@@ -24,34 +98,135 @@
             <a href="Games.html" class="btn btn-outline-primary">Games</a>
             <a href="about.html" class="btn btn-outline-primary">About</a>
         </div>
+
         <div class="content">
-            <h3 style="text-align: center; color: #000dff; background-color: rgb(170, 213, 251);"> ⬇︎⬇︎⬇︎ Scroll down for more!!! ⬇︎⬇︎⬇︎<br>⬇︎⬇︎⬇︎ Don't forget to have fun!!! ⬇︎⬇︎⬇︎</h3>
-            <div class="iframe">
-                <iframe src="Games/SuperSeagull.html" width="1040" height="680" allow="autoplay"></iframe>
+            <!-- SEARCH BAR RIGHT BELOW THE ARROWS -->
+            <div class="search-wrapper">
+                <input type="text" id="searchInput" placeholder="Search games by title..." autocomplete="off">
+                <div class="search-icon" id="searchBtn"></div>
+                <div id="suggestions" class="suggestions"></div>
             </div>
-            <br>
-            <div class="iframe">
-                <iframe src="Games/Terminator.html" width="1040" height="680" allow="autoplay"></iframe>
+
+            <!-- Games with titles for searching -->
+            <div class="game-item" style="border: 5px solid #e7e5e5;">
+                <div class="iframe">
+                    <iframe src="Games/SuperSeagull.html" width="1040" height="680" allow="autoplay"></iframe>
+                </div>
+                <h4 style="text-align:center; margin:10px 0; font-weight:bold;">Super Seagull</h4>
             </div>
-            <br>
-            <div class="iframe">
-                <iframe src="Games/Robber.html" width="1040" height="680" allow="autoplay"></iframe>
+
+            <div class="game-item" style="border: 5px solid #e7e5e5;">
+                <div class="iframe">
+                    <iframe src="Games/Terminator.html" width="1040" height="680" allow="autoplay"></iframe>
+                </div>
+                <h4 style="text-align:center; margin:10px 0; font-weight:bold;">Terminator</h4>
             </div>
-            <br>
-            <div class="iframe">
-                <iframe src="Games/FlappyBird.html" width="1040" height="680" allow="autoplay"></iframe>
+
+            <div class="game-item" style="border: 5px solid #e7e5e5;">
+                <div class="iframe">
+                    <iframe src="Games/Robber.html" width="1040" height="680" allow="autoplay"></iframe>
+                </div>
+                <h4 style="text-align:center; margin:10px 0; font-weight:bold;">Robber</h4>
             </div>
-                <p style="background-color: #ffff00; text-align: center;">every thing we make is kid frendly. <br> that is
-                why we are not on youtube.<br> Also, all the games on this page are mainly used with keyboards or desktops or laptops.</p>
+
+            <div class="game-item" style="border: 5px solid #e7e5e5;">
+                <div class="iframe">
+                    <iframe src="Games/painter.html" width="1040" height="680" allow="autoplay"></iframe>
+                </div>
+                <h4 style="text-align:center; margin:10px 0; font-weight:bold;">Paint Paint</h4>
+            </div>
+
+            <div class="game-item" style="border: 5px solid #e7e5e5;">
+                <div class="iframe">
+                    <iframe src="Games/FlappyBird.html" width="1040" height="680" allow="autoplay"></iframe>
+                </div>
+                <h4 style="text-align:center; margin:10px 0; font-weight:bold;">Flappy Bird</h4>
+            </div>
+
+            <div class="game-item" style="border: 5px solid #e7e5e5;">
+                <div class="iframe">
+                    <iframe src="Games/TowerDefence.html" width="1040" height="680" allow="autoplay"></iframe>
+                </div>
+                <h4 style="text-align:center; margin:10px 0; font-weight:bold;">Tower Defence</h4>
+            </div>
+
+            <div class="game-item" style="border: 5px solid #e7e5e5;">
+                <div class="iframe">
+                    <iframe src="Games/PVPOfBloxs.html" width="1040" height="680" allow="autoplay"></iframe>
+                </div>
+                <h4 style="text-align:center; margin:10px 0; font-weight:bold;">PVP Of Bloxs</h4>
+            </div>
+
+            <p style="background-color: #ffff00; text-align: center;">
+                every thing we make is kid frendly. <br> that is why we are not on youtube.<br>
+                Also, all the games on this page are mainly used with keyboards or desktops or laptops.
+            </p>
         </div>
     </div>
-    <style>
-        .iframe {
-  display: flex;
-  justify-content: center; /* Centers horizontally */
-  align-items: center;   /* Centers vertically */
-}
-    </style>
+
+    <!-- SAME PERFECT SEARCH SCRIPT -->
+    <script>
+        const input = document.getElementById('searchInput');
+        const btn = document.getElementById('searchBtn');
+        const suggestions = document.getElementById('suggestions');
+        const games = document.querySelectorAll('.game-item');
+
+        const gameList = Array.from(games).map(g => ({
+            el: g,
+            title: g.querySelector('h4').textContent.trim(),
+            lower: g.querySelector('h4').textContent.trim().toLowerCase()
+        }));
+
+        function search() {
+            const q = input.value.trim().toLowerCase();
+            gameList.forEach(g => {
+                g.el.style.display = g.lower.includes(q) ? '' : 'none';
+            });
+        }
+
+        function showSuggestions(matches) {
+            suggestions.innerHTML = '';
+            if (!input.value || matches.length === 0) {
+                suggestions.style.display = 'none';
+                return;
+            }
+            matches.forEach(m => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+                item.textContent = m.title;
+                item.onclick = () => {
+                    input.value = m.title;
+                    search();
+                    suggestions.style.display = 'none';
+                };
+                suggestions.appendChild(item);
+            });
+            suggestions.style.display = 'block';
+        }
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim();
+            search();
+            if (!q) {
+                gameList.forEach(g => g.el.style.display = '');
+                suggestions.style.display = 'none';
+                return;
+            }
+            const matches = gameList.filter(g => g.lower.includes(q.toLowerCase())).slice(0, 6);
+            showSuggestions(matches);
+        });
+
+        btn.addEventListener('click', () => {
+            search();
+            suggestions.style.display = 'none';
+        });
+
+        document.addEventListener('click', e => {
+            if (!input.contains(e.target) && !btn.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.style.display = 'none';
+            }
+        });
+    </script>
 </body>
 
 </html>
