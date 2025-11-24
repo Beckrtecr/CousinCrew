@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tank Battle - PAC-MAN WRAP (FIXED)</title>
+<style>
+  body { margin:0; background:#0a0a0a; overflow:hidden; font-family:Arial; }
+  canvas { display:block; background:#1a1a1a; }
+  #ui { position:absolute; top:0; left:0; right:0; padding:20px; color:#fff; font:bold 26px Arial;
+        text-shadow:2px 2px 6px #000; display:flex; justify-content:space-between; z-index:10; pointer-events:none; }
+  .health { height:34px; width:360px; background:#111; border:3px solid #555; border-radius:17px; overflow:hidden; margin-top:10px; }
+  .bar { height:100%; width:100%; background:linear-gradient(90deg,#0a0,#0f0); transition:width .3s; }
+  .bar.low { background:linear-gradient(90deg,#f80,#f00); }
+  #winner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+            font:bold 130px Arial; color:gold; display:none; text-shadow:0 0 50px #ff0; }
+  #info { position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+          background:rgba(0,0,0,0.7); color:#0ff; padding:16px 40px; border-radius:15px; font:20px Arial; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div>BLUE: <span id="p1score">0</span><div class="health"><div id="p1health" class="bar"></div></div></div>
+  <div style="text-align:right">RED: <span id="p2score">0</span><div class="health"><div id="p2health" class="bar"></div></div></div>
+</div>
+<div id="winner"></div>
+<div id="info">BLUE: WASD + E | RED: ARROWS + RIGHT SHIFT | Pac-Man wrap-around!</div>
+
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+
+const keys = {};
+addEventListener('keydown', e => keys[e.code] = true);
+addEventListener('keyup',   e => keys[e.code] = false);
+
+const walls = [
+  {x: innerWidth*0.2,  y: innerHeight*0.25, w:140, h:80},
+  {x: innerWidth*0.8,  y: innerHeight*0.22, w:160, h:70},
+  {x: innerWidth*0.35, y: innerHeight*0.55, w:130, h:90},
+  {x: innerWidth*0.65, y: innerHeight*0.48, w:150, h:80},
+  {x: innerWidth*0.15, y: innerHeight*0.75, w:120, h:100},
+  {x: innerWidth*0.85, y: innerHeight*0.78, w:140, h:90},
+  {x: innerWidth*0.5,  y: innerHeight*0.15, w:100, h:60},
+  {x: innerWidth*0.3,  y: innerHeight*0.85, w:90,  h:70},
+  {x: innerWidth*0.7,  y: innerHeight*0.9,  w:110, h:60},
+  {x: innerWidth*0.5,  y: innerHeight*0.7,  w:130, h:80},
+];
+
+class Tank {
+  constructor(x,y,color,ctrl){ this.reset(x,y); this.color=color; this.ctrl=ctrl; this.speed=2.8; this.size=46; }
+  reset(x,y){ this.x=x; this.y=y; this.angle=0; this.hp=100; this.alive=true; this.shootCD=0; this.smokeTimer=0; }
+  update(){
+    if(!this.alive) return;
+    let dx=0, dy=0;
+    if(keys[this.ctrl.up])    dy-=this.speed;
+    if(keys[this.ctrl.down])  dy+=this.speed;
+    if(keys[this.ctrl.left])  dx-=this.speed;
+    if(keys[this.ctrl.right]) dx+=this.speed;
+    if(dx||dy) this.angle=Math.atan2(dy,dx);
+
+    let nx=this.x+dx, ny=this.y+dy;
+
+    // PAC-MAN WRAP
+    if(nx < 0) nx += canvas.width;
+    if(nx > canvas.width) nx -= canvas.width;
+    if(ny < 0) ny += canvas.height;
+    if(ny > canvas.height) ny -= canvas.height;
+
+    if(!this.hits(nx,ny)){ this.x=nx; this.y=ny; this.smokeTimer=8; }
+    else{
+      if(!this.hits(this.x+dx,this.y)) this.x+=dx;
+      if(!this.hits(this.x,this.y+dy)) this.y+=dy;
+    }
+
+    // Final wrap
+    if(this.x < 0) this.x += canvas.width;
+    if(this.x > canvas.width) this.x -= canvas.width;
+    if(this.y < 0) this.y += canvas.height;
+    if(this.y > canvas.height) this.y -= canvas.height;
+
+    if(keys[this.ctrl.shoot] && this.shootCD<=0){
+      bullets.push(new Bullet(this.x+Math.cos(this.angle)*50, this.y+Math.sin(this.angle)*50, this.angle,
+        this===blue?'#4fcfff':'#ff5555', this));
+      this.shootCD=18;
+    }
+    if(this.shootCD>0) this.shootCD--;
+
+    if(this.smokeTimer-->0)
+      smokes.push(new Smoke(this.x-Math.cos(this.angle)*36, this.y-Math.sin(this.angle)*36));
+  }
+  hits(x,y){
+    for(let w of walls)
+      if(x>w.x-w.w/2-this.size && x<w.x+w.w/2+this.size && y>w.y-w.h/2-this.size && y<w.y+w.h/2+this.size)
+        return true;
+    return false;
+  }
+  die(){
+    this.alive=false;
+    explosions.push(new Explosion(this.x,this.y,'large'));
+    (this===blue?red:blue).score++;
+    updateScore();
+    setTimeout(()=>this.respawn(),2100);
+  }
+  respawn(){
+    let tries=0;
+    do{ this.x=120+Math.random()*(canvas.width-240); this.y=120+Math.random()*(canvas.height-240); tries++; }
+    while(this.hits(this.x,this.y) && tries<200);
+    this.hp=100; this.alive=true; updateHP();
+  }
+  draw(){
+    if(!this.alive && Date.now()%220>110) return;
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    ctx.rotate(this.angle);
+
+    ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(-37,7,74,24);
+    ctx.fillStyle='#222'; ctx.fillRect(-35,-21,70,14); ctx.fillRect(-35,7,70,14);
+    const g=ctx.createLinearGradient(-30,-25,30,25);
+    g.addColorStop(0,this.color); g.addColorStop(0.5,this.color); g.addColorStop(1,this.color+'aa');
+    ctx.fillStyle=g; ctx.fillRect(-30,-24,60,48);
+    ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.strokeRect(-30,-24,60,48);
+    ctx.fillStyle='#444'; ctx.beginPath(); ctx.arc(0,0,28,0,Math.PI*2); ctx.fill();
+
+    // Grey barrel + bright tip
+    ctx.fillStyle = '#888';
+    ctx.fillRect(16,-13,48,26);
+    ctx.fillStyle = '#bbbbbb';
+    ctx.fillRect(58,-10,10,20);
+
+    if(this.shootCD===17){
+      ctx.fillStyle='#ffaa33'; ctx.beginPath(); ctx.arc(68,0,18,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+class Bullet{
+  constructor(x,y,a,col,owner){ this.x=x; this.y=y; this.a=a; this.col=col; this.owner=owner; this.life=160; }
+  update(){
+    this.x += Math.cos(this.a)*12;
+    this.y += Math.sin(this.a)*12;
+    this.life--;
+
+    // Bullets wrap too!
+    if(this.x < 0) this.x += canvas.width;
+    if(this.x > canvas.width) this.x -= canvas.width;
+    if(this.y < 0) this.y += canvas.height;
+    if(this.y > canvas.height) this.y -= canvas.height;
+
+    for(let w of walls){
+      if(this.x>w.x-w.w/2 && this.x<w.x+w.w/2 && this.y>w.y-w.h/2 && this.y<w.y+w.h/2){
+        const dx=this.owner.x-this.x, dy=this.owner.y-this.y;
+        this.a = Math.atan2(dy,dx)+(Math.random()-0.5)*0.6;
+        explosions.push(new Explosion(this.x,this.y,'small'));
+        break;
+      }
+    }
+  }
+  draw(){
+    ctx.shadowColor=this.col; ctx.shadowBlur=16;
+    ctx.fillStyle=this.col;
+    ctx.beginPath(); ctx.arc(this.x,this.y,7,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+  }
+}
+
+class Explosion{
+  constructor(x,y,size='normal'){
+    this.particles=[]; const n=size==='large'?70:18;
+    for(let i=0;i<n;i++){
+      const a=Math.random()*Math.PI*2, s=6+Math.random()*14;
+      this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:50});
+    }
+  }
+  update(){ this.particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.3;p.life--;}); }
+  draw(){
+    this.particles.forEach(p=>{
+      const a=p.life/50;
+      ctx.fillStyle=`rgba(255,${120+p.life*3},20,${a})`;
+      ctx.fillRect(p.x-5,p.y-5,10,10);
+    });
+  }
+}
+
+class Smoke{
+  constructor(x,y){
+    this.x=x; this.y=y;
+    this.vx=(Math.random()-0.5)*1; this.vy=(Math.random()-0.7)*1;
+    this.life=45;
+  }
+  update(){ this.x+=this.vx; this.y+=this.vy; this.vy+=0.06; this.life--; }
+  draw(){
+    ctx.globalAlpha=this.life/45*0.65;
+    ctx.fillStyle='#555';
+    ctx.beginPath(); ctx.arc(this.x,this.y,9+(1-this.life/45)*10,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+
+const blue = new Tank(200, canvas.height/2, '#0088ff', {up:'KeyW',down:'KeyS',left:'KeyA',right:'KeyD',shoot:'KeyE'});
+const red  = new Tank(canvas.width-200, canvas.height/2, '#ff3333', {up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight',shoot:'ShiftRight'});
+
+blue.respawn(); red.respawn();
+
+let bullets=[], explosions=[], smokes=[];
+
+function updateHP(){
+  document.getElementById('p1health').style.width=blue.hp+'%';
+  document.getElementById('p2health').style.width=red.hp+'%';
+  document.getElementById('p1health').classList.toggle('low',blue.hp<30);
+  document.getElementById('p2health').classList.toggle('low',red.hp<30);
+}
+function updateScore(){
+  document.getElementById('p1score').textContent=blue.score;
+  document.getElementById('p2score').textContent=red.score;
+  if(blue.score>=10||red.score>=10){
+    document.getElementById('winner').textContent=blue.score>=10?'BLUE WINS!':'RED WINS!';
+    document.getElementById('winner').style.display='block';
+  }
+}
+
+function loop(){
+  ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  walls.forEach(w=>{
+    const g=ctx.createLinearGradient(w.x-w.w/2,w.y-w.h/2,w.x+w.w/2,w.y+w.h/2);
+    g.addColorStop(0,'#777'); g.addColorStop(1,'#555');
+    ctx.fillStyle=g; ctx.fillRect(w.x-w.w/2,w.y-w.h/2,w.w,w.h);
+    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(w.x-w.w/2+8,w.y-w.h/2+8,w.w,w.h);
+    ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(w.x-w.w/2+10,w.y); ctx.lineTo(w.x+w.w/2-10,w.y);
+    ctx.moveTo(w.x,w.y-w.h/2+10); ctx.lineTo(w.x,w.y+w.h/2-10);
+    ctx.stroke();
+    ctx.strokeStyle='#999'; ctx.lineWidth=4;
+    ctx.strokeRect(w.x-w.w/2,w.y-w.h/2,w.w,w.h);
+  });
+
+  blue.update(); red.update();
+
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    b.update();
+    if(b.life<=0){bullets.splice(i,1);continue;}
+    [blue,red].forEach(t=>{
+      if(t.alive && b.owner!==t && Math.hypot(b.x-t.x,b.y-t.y)<46){
+        t.hp-=35; updateHP();
+        explosions.push(new Explosion(b.x,b.y));
+        bullets.splice(i,1);
+        if(t.hp<=0) t.die();
+      }
+    });
+    b.draw();
+  }
+
+  explosions.forEach((e,i)=>{e.update();e.draw();if(e.particles.length===0)explosions.splice(i,1);});
+  smokes.forEach((s,i)=>{s.update();s.draw();if(s.life<=0)smokes.splice(i,1);});
+
+  blue.draw(); red.draw();
+  requestAnimationFrame(loop);
+}
+
+updateHP(); updateScore();
+loop();
+
+addEventListener('resize',()=>{canvas.width=innerWidth;canvas.height=innerHeight; blue.respawn(); red.respawn();});
+</script>
+</body>
+</html>
