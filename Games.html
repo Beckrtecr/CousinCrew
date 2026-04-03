@@ -22,12 +22,14 @@
             justify-content: center;
             gap: 10px;
         }
+
         .header img.site-logo {
             height: 40px;
             width: 40px;
             object-fit: contain;
             border-radius: 6px;
         }
+
         .header span {
             font-size: 1.4rem;
             letter-spacing: 1px;
@@ -153,8 +155,10 @@
         .fullscreen-overlay {
             display: none;
             position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             background: #000;
             z-index: 99999;
             flex-direction: column;
@@ -180,9 +184,9 @@
         }
 
         .fullscreen-topbar .minimize-btn {
-            background: rgba(255,255,255,0.2);
+            background: rgba(255, 255, 255, 0.2);
             color: white;
-            border: 2px solid rgba(255,255,255,0.5);
+            border: 2px solid rgba(255, 255, 255, 0.5);
             border-radius: 8px;
             padding: 6px 16px;
             font-size: 0.95rem;
@@ -195,7 +199,7 @@
         }
 
         .fullscreen-topbar .minimize-btn:hover {
-            background: rgba(255,255,255,0.35);
+            background: rgba(255, 255, 255, 0.35);
         }
 
         .fullscreen-topbar .minimize-btn svg {
@@ -227,7 +231,9 @@
         <div class="fullscreen-topbar">
             <span class="game-name" id="fullscreenGameName">Game</span>
             <button class="minimize-btn" id="minimizeBtn" onclick="closeFullscreen()">
-                <svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+                <svg viewBox="0 0 24 24">
+                    <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+                </svg>
                 Minimize
             </button>
         </div>
@@ -266,7 +272,25 @@
                 <div class="game-title-bar">
                     <h4>Super Seagull</h4>
                     <button class="fullscreen-btn" onclick="openFullscreen('Games/SuperSeagull.html', 'Super Seagull')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
+                        Full Screen
+                    </button>
+                </div>
+            </div>
+
+            <div class="game-item">
+                <div class="iframe">
+                    <iframe src="AsteroidsMN.html" width="1040" height="680" allow="autoplay"></iframe>
+                </div>
+                <div class="game-title-bar">
+                    <h4>Galaxy mother nature fight</h4>
+                    <button class="fullscreen-btn"
+                        onclick="openFullscreen('AsteroidsMN.html', 'Galaxy mother nature fight')">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -279,7 +303,9 @@
                 <div class="game-title-bar">
                     <h4>PVP Tanks</h4>
                     <button class="fullscreen-btn" onclick="openFullscreen('Games/PVPTanks.html', 'PVP Tanks')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -291,8 +317,11 @@
                 </div>
                 <div class="game-title-bar">
                     <h4>Cookie Clicker</h4>
-                    <button class="fullscreen-btn" onclick="openFullscreen('Games/CookieClicker.html', 'Cookie Clicker')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                    <button class="fullscreen-btn"
+                        onclick="openFullscreen('Games/CookieClicker.html', 'Cookie Clicker')">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -305,7 +334,9 @@
                 <div class="game-title-bar">
                     <h4>Terminator</h4>
                     <button class="fullscreen-btn" onclick="openFullscreen('Games/Terminator.html', 'Terminator')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -318,7 +349,9 @@
                 <div class="game-title-bar">
                     <h4>Robber</h4>
                     <button class="fullscreen-btn" onclick="openFullscreen('Games/Robber.html', 'Robber')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -331,7 +364,9 @@
                 <div class="game-title-bar">
                     <h4>Paint Paint</h4>
                     <button class="fullscreen-btn" onclick="openFullscreen('Games/painter.html', 'Paint Paint')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -344,7 +379,9 @@
                 <div class="game-title-bar">
                     <h4>Flappy Bird</h4>
                     <button class="fullscreen-btn" onclick="openFullscreen('Games/FlappyBird.html', 'Flappy Bird')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -357,7 +394,9 @@
                 <div class="game-title-bar">
                     <h4>Tower Defence</h4>
                     <button class="fullscreen-btn" onclick="openFullscreen('Games/TowerDefence.html', 'Tower Defence')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -370,7 +409,9 @@
                 <div class="game-title-bar">
                     <h4>PVP Of Bloxs</h4>
                     <button class="fullscreen-btn" onclick="openFullscreen('Games/PVPOfBloxs.html', 'PVP Of Bloxs')">
-                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
                         Full Screen
                     </button>
                 </div>
@@ -403,7 +444,7 @@
         }
 
         // Close with Escape key
-        document.addEventListener('keydown', function(e) {
+        document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && overlay.classList.contains('active')) {
                 closeFullscreen();
             }
